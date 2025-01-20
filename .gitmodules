@@ -1,0 +1,6 @@
+[submodule "third_party/nccl_nvtx"]
+	path = third_party/nccl_nvtx
+	url = https://github.com/ZhiyiHu1999/nccl_nvtx_v2.20.5-1.git
+[submodule "third_party/LogGOPSim"]
+	path = third_party/LogGOPSim
+	url = https://github.com/spcl/LogGOPSim.git
