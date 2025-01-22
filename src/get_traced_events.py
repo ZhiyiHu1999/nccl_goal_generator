@@ -1385,9 +1385,9 @@ def apply_user_config(yaml_file, events_parallel_group, comm_init_events, comm_I
                 comm_init_events[goal_rank][gpuId] = gpu_comm_init_events[gpuId]
 
             for commId in comm_Info.keys():
-                for rank in comm_Info[commId]["rank_To_rankInfo"].keys():
-                    comm_Info[commId]["rank_To_rankInfo"][rank]["goal_rank"] = gpuId_to_goal[comm_Info[commId]["rank_To_rankInfo"][rank]["gpuId"]]
-                    comm_Info[commId]["rank_To_rankInfo"][rank].pop("host_name", None)
+                for rank in comm_Info[commId]['rank_To_rankInfo'].keys():
+                    comm_Info[commId]['rank_To_rankInfo'][rank]['goal_rank'] = gpuId_to_goal[comm_Info[commId]['rank_To_rankInfo'][rank]['gpuId']]
+                    comm_Info[commId]['rank_To_rankInfo'][rank].pop('host_name', None)
 
         else:
             print('no configuration in config file')
@@ -4276,12 +4276,15 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config_node_gpu', type=str, required=False, help='yaml file for configuration of nodes and GPUs')
+    parser.add_argument('--results_dir', type=str, required=False, help='directory for results')
     args = parser.parse_args()
 
     # Get nsys events
-    Dir_Path = './results/nsys_reports'
-    Comm_Init_Events, NCCL_Events, CUPTI_Kernel_Results, Comm_Info, HostName_To_GoalRank = get_nsys_events(Dir_Path)  ## nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank
-    with open('./results/nsys_events_intermediate_output.json', 'w') as json_file:
+    Dir_Path = args.results_dir
+    nsys_reports_path = os.path.join(Dir_Path, 'nsys_reports')
+    Comm_Init_Events, NCCL_Events, CUPTI_Kernel_Results, Comm_Info, HostName_To_GoalRank = get_nsys_events(nsys_reports_path)  ## nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank
+    file_path = os.path.join(Dir_Path, 'Events_Dependency.goal')
+    with open(file_path, 'w') as json_file:
         json.dump(HostName_To_GoalRank, json_file, indent=4)
         json_file.write('\n\n')
         json.dump(Comm_Info, json_file, indent=4)
@@ -4294,41 +4297,46 @@ def main():
     print('Nsys_Events has been exported to nsys_events_intermediate_output.json')
 
     Merged_Events = merge_nsys_events(NCCL_Events, CUPTI_Kernel_Results, Comm_Info)
-    with open('./results/nsys_events_merged_output.json', 'w') as json_file:
+    file_path = os.path.join(Dir_Path, 'nsys_events_merged_output.json')
+    with open(file_path, 'w') as json_file:
         json.dump(Merged_Events, json_file, indent=4)
         json_file.write('\n\n')
     print('Merged_Events has been exported to nsys_events_merged_output.json')
 
     Events_Pair = check_events_pair(Merged_Events)
-    with open('./results/nsys_events_pair_output.json', 'w') as json_file:
+    file_path = os.path.join(Dir_Path, 'nsys_events_pair_output.json')
+    with open(file_path, 'w') as json_file:
         json.dump(Events_Pair, json_file, indent=4)
         json_file.write('\n\n')
 
     Expanded_Events = expand_group_events(Merged_Events)
-    with open('./results/nsys_events_expanded_output.json', 'w') as json_file:
+    file_path = os.path.join(Dir_Path, 'nsys_events_expanded_output.json')
+    with open(file_path, 'w') as json_file:
         json.dump(Expanded_Events, json_file, indent=4)
         json_file.write('\n\n')
 
     Events_Parallel_Group = get_events_parallel_group(Expanded_Events)
-    with open('./results/nsys_events_parallel_group_output.json', 'w') as json_file:
+    file_path = os.path.join(Dir_Path, 'nsys_events_parallel_group_output.json')
+    with open(file_path, 'w') as json_file:
         json.dump(Events_Parallel_Group, json_file, indent=4)
         json_file.write('\n\n')
 
     if args.config_node_gpu is not None:
         Events_Parallel_Group, Comm_Init_Events, Comm_Info = apply_user_config(args.config_node_gpu, Events_Parallel_Group, Comm_Init_Events, Comm_Info)
 
-    Goal_File_Name = './results/Events_Dependency.goal'
+    Goal_File_Name = os.path.join(Dir_Path, 'Events_Dependency.goal')
     get_events_dependency(Events_Parallel_Group, Comm_Init_Events, Goal_File_Name)
     print('Events goal file has been exported to Events_Dependency.goal')
 
-    Goal_File_Name = './results/InGPU_MicroEvents_Dependency.goal'
+    Goal_File_Name = os.path.join(Dir_Path, 'InGPU_MicroEvents_Dependency.goal')
     SendRecvEvents_To_TaskCounter = get_in_gpu_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, Goal_File_Name)
-    with open('./results/SendRecvEvents_To_TaskCounter.json', 'w') as json_file:
+    file_path = os.path.join(Dir_Path, 'SendRecvEvents_To_TaskCounter.json')
+    with open(file_path, 'w') as json_file:
         json.dump(SendRecvEvents_To_TaskCounter, json_file, indent=4)
         json_file.write('\n\n')
     print('In-GPU goal file has been exported to InGPU_MicroEvents_Dependency.goal')
 
-    Goal_File_Name = './results/InterNode_MicroEvents_Dependency.goal'
+    Goal_File_Name = os.path.join(Dir_Path, 'InterNode_MicroEvents_Dependency.goal')
     get_inter_node_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, SendRecvEvents_To_TaskCounter, Goal_File_Name)
     print('Internode goal file has been exported to InterNode_MicroEvents_Dependency.goal')
 
