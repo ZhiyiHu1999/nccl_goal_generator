@@ -6,14 +6,14 @@ setup(
     description="A toolchain for NCCL trace capturing and LogGOPSim goal file generation",
     author="Your Name",
     author_email="your_email@example.com",
-    # 这里使用 py_modules 指定单文件模块的打包方式
+    # Using py_modules to specify a single-file module packaging method
     py_modules=["run_generator", "get_traced_events", "goal2dot"],
-    # 告诉 setuptools，这些模块都在 src/ 目录下
+    # Inform setuptools that these modules are located in the src/ directory
     package_dir={"": "src"},
-    # 设置一个命令行入口点
+    # Define a command-line entry point
     entry_points={
         "console_scripts": [
-            # 命令名 = 模块名:函数名
+            # command_name = module_name:function_name
             "nccl_goal_generator = run_generator:main",
         ],
     },

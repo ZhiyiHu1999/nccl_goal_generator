@@ -1,6 +1,7 @@
 import argparse
 import subprocess
 import tempfile
+import os
 
 def main():
     parser = argparse.ArgumentParser()
@@ -28,8 +29,9 @@ def main():
 
     args = parser.parse_args()
 
-    temp_dir = tempfile.mkdtemp()
-    print(f"Temporary Directory Name: {temp_dir}")
+    # temp_dir = tempfile.mkdtemp()
+    temp_dir = tempfile.mkdtemp(dir=os.path.expanduser("~"))
+    # temp_dir = './results'
 
     commands = f"""
         rm -rf {temp_dir}
@@ -39,7 +41,7 @@ def main():
         rm -rf $NSYS_REPORT_DIR
         mkdir -p $NSYS_REPORT_DIR
 
-        srun ~/opt/nvidia/nsight-systems-cli/2024.5.1/bin/nsys profile \
+        srun nsys profile \
         --trace=nvtx,cuda \
         --cuda-memory-usage=false \
         --cuda-um-cpu-page-faults=false \
@@ -51,8 +53,7 @@ def main():
         for report_file in ${{NSYS_REPORT_DIR}}/*.nsys-rep; do
             if [ -f "$report_file" ]; then
                 sqlite_file="${{report_file%.nsys-rep}}.sqlite"
-                ~/opt/nvidia/nsight-systems-cli/2024.5.1/bin/nsys export --type=sqlite \
-                --ts-normalize=true --output="$sqlite_file" "$report_file"
+                nsys export --type=sqlite --output="$sqlite_file" "$report_file"
                 echo "Exported $report_file to $sqlite_file"
             fi
         done
@@ -61,13 +62,13 @@ def main():
 
         rm -rf {args.results_dir}
         mkdir -p {args.results_dir}
-        cp {temp_dir}/InterNode_MicroEvents_Dependency.goal {args.results_dir}
-    """
+        
+        txt2bin -i {temp_dir}/InterNode_MicroEvents_Dependency.goal -o {temp_dir}/InterNode_MicroEvents_Dependency.bin
+        cp {temp_dir}/InterNode_MicroEvents_Dependency.bin {args.results_dir}
 
-        # python3 goal2dot.py
-        # dot -Tsvg ./results/Events_Dependency.dot -o ./results/Events_Dependency.svg
-        # dot -Tsvg ./results/InGPU_MicroEvents_Dependency.dot -o ./results/InGPU_MicroEvents_Dependency.svg
-        # dot -Tsvg ./results/InterNode_MicroEvents_Dependency.dot -o ./results/InterNode_MicroEvents_Dependency.svg    
+        rm -rf temp_dir
+
+    """
 
     subprocess.run(commands, shell=True, executable="/bin/bash", check=True)
 

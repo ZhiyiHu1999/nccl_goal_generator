@@ -26,7 +26,7 @@ rm -rf "/users/zhu/DeepSpeedExamples/training/HelloDeepSpeed/experiment_deepspee
 mkdir -p "/users/zhu/DeepSpeedExamples/training/HelloDeepSpeed/experiment_deepspeed"
 # pip install -r requirements.txt
 
-export LD_PRELOAD=/users/zhu/nccl_nvtx_v2.20.5-1/nccl/build/lib/libnccl.so
+export LD_PRELOAD=/users/zhu/nccl_goal_generator/third_party/nccl_nvtx/nccl/build/lib/libnccl.so
 
 cd ../src
 
