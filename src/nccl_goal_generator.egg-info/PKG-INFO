@@ -1,5 +1,0 @@
-Metadata-Version: 2.1
-Name: nccl_goal_generator
-Version: 0.1.0
-Summary: A toolchain for NCCL trace capturing and LogGOPSim goal file generation
-Requires-Python: >=3.6

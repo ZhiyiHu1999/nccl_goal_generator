@@ -1,2 +1,0 @@
-[console_scripts]
-nccl_goal_generator = nccl_goal_generator.run_generator:main
