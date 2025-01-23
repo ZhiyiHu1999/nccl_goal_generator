@@ -66,6 +66,10 @@ cd nccl_goal_generator
     wget https://developer.nvidia.com/downloads/assets/tools/secure/nsight-systems/2024_5/NsightSystems-linux-cli-public-2024.5.1.113-3461954.rpm
     rpm2cpio NsightSystems-linux-cli-public-2024.5.1.113-3461954.rpm | cpio -idmv
 
+    ## Necessary and may needs minor modifications based on your nsys version:
+    echo 'export PATH=~/opt/nvidia/nsight-systems-cli/2024.5.1/bin:$PATH' >> ~/.bashrc
+    source ~/.bashrc
+
     ## To verify the installation:
     nsys --version
     ## A successful installation should output like:
@@ -74,13 +78,28 @@ cd nccl_goal_generator
     ## To verify the installation:
     which nsys
     ## A successful installation should output like:
-    /usr/local/bin/nsys
+    ~/opt/nvidia/nsight-systems-cli/2024.5.1/bin/nsys
     ```
 3. **LogGOPSim**
 
    - [Repository](https://github.com/spcl/LogGOPSim)
    - Used as a submodule.
    - Consumes the `goal` file generated for network simulation.
+   - Necessary setting (may require minor modifications based on your path):
+   ```bash
+   echo 'export PATH=$HOME/nccl_goal_generator/third_party/LogGOPSim-1.1:$PATH' >> ~/.bashrc
+   source ~/.bashrc
+
+   ## To verify the installation:
+   which txt2bin
+   ## A successful installation should output like:
+   ~/nccl_goal_generator/third_party/LogGOPSim-1.0/txt2bin
+
+   ## To verify the installation:
+   which LogGOPSim 
+   ## A successful installation should output like:
+   ~/nccl_goal_generator/third_party/LogGOPSim-1.0/LogGOPSim
+   ```
 4. **Graphviz**
 
    - [Graphviz website](https://graphviz.org/).
@@ -96,3 +115,30 @@ cd nccl_goal_generator
    echo 'export LD_LIBRARY_PATH=~/graphviz/usr/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
    source ~/.bashrc
    ```
+
+## 4. Usage Introduction
+
+### 4.1 Usage Steps
+
+Steps to use the toolchain include:
+
+- Step 1: Make sure your job script can run successfully without the toolchain.
+
+- Step 2: Modify in the job script after step 1.
+   1. Set `LD_PRELOAD` to the nvtx-annotated nccl given in the toolchain. (Require minor modifications based on your path)
+   ```bash
+   export LD_PRELOAD=$HOME/nccl_goal_generator/third_party/nccl_nvtx/nccl/build/lib/libnccl.so
+   ```
+   2. Modify the command that runs the training script to use the module in the toolchain
+   ```bash
+   ## Original command to run the script
+   srun bash run_ds.sh
+
+   ## Modified command that uses the toolchain
+   python3 run_generator.py --training_script run_ds.sh --results_dir results --config_node_gpu node_gpu_config.yaml
+   ```
+
+### 4.2 Arguments
+- `--training_script`: Path to the training script that can run in step 1.
+- `--results_dir`: Path for the compiled goal file (bin file).
+- `--config_node_gpu`: Path for the user specified nodes and GPUs configuration. (The total number of GPUs you specify should be equal to the GPUs used for tracing)

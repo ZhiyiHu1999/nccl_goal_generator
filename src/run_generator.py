@@ -33,6 +33,8 @@ def main():
     temp_dir = tempfile.mkdtemp(dir=os.path.expanduser("~"))
     # temp_dir = './results'
 
+    config_node_gpu_arg = f"--config_node_gpu {args.config_node_gpu}" if args.config_node_gpu else ""
+
     commands = f"""
         rm -rf {temp_dir}
         mkdir -p {temp_dir}
@@ -58,7 +60,7 @@ def main():
             fi
         done
 
-        python3 get_traced_events.py --config_node_gpu {args.config_node_gpu} --results_dir {temp_dir}
+        python3 get_traced_events.py {config_node_gpu_arg} --results_dir {temp_dir}
 
         rm -rf {args.results_dir}
         mkdir -p {args.results_dir}
