@@ -13,6 +13,7 @@ dataset/
 LogGOPSim-1.1/
 
 *.egg-info/
+**/*.egg-info/
 dist/
 build/
 eggs/
