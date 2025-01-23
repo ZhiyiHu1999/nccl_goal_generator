@@ -30,4 +30,5 @@ export LD_PRELOAD=/users/zhu/nccl_goal_generator/third_party/nccl_nvtx/nccl/buil
 
 cd ../src
 
-python3 run_generator.py --training_script ../example/run_ds.sh --results_dir ../example/results --config_node_gpu ../example/node_gpu_config.yaml
+nccl_goal_generator --training_script ../example/run_ds.sh --results_dir ../example/results --config_node_gpu ../example/node_gpu_config.yaml
+# nccl_goal_generator --training_script ../example/run_ds.sh --results_dir ../example/results

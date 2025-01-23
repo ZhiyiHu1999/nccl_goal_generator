@@ -4029,14 +4029,9 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
 
             file.write('}\n')
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config_node_gpu', type=str, required=False, help='yaml file for configuration of nodes and GPUs')
-    parser.add_argument('--results_dir', type=str, required=False, help='directory for results')
-    args = parser.parse_args()
-
+def main(config_node_gpu=None, results_dir=None):
     # Get nsys events
-    Dir_Path = args.results_dir
+    Dir_Path = results_dir
     nsys_reports_path = os.path.join(Dir_Path, 'nsys_reports')
     Comm_Init_Events, NCCL_Events, CUPTI_Kernel_Results, Comm_Info, HostName_To_GoalRank = get_nsys_events(nsys_reports_path)  ## nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank
     file_path = os.path.join(Dir_Path, 'Events_Dependency.goal')
@@ -4077,8 +4072,8 @@ def main():
         json.dump(Events_Parallel_Group, json_file, indent=4)
         json_file.write('\n\n')
 
-    if args.config_node_gpu is not None:
-        Events_Parallel_Group, Comm_Init_Events, Comm_Info = apply_user_config(args.config_node_gpu, Events_Parallel_Group, Comm_Init_Events, Comm_Info)
+    if config_node_gpu is not None:
+        Events_Parallel_Group, Comm_Init_Events, Comm_Info = apply_user_config(config_node_gpu, Events_Parallel_Group, Comm_Init_Events, Comm_Info)
 
     Goal_File_Name = os.path.join(Dir_Path, 'Events_Dependency.goal')
     get_events_dependency(Events_Parallel_Group, Comm_Init_Events, Goal_File_Name)
