@@ -100,20 +100,16 @@ cd nccl_goal_generator
    ## A successful installation should output like:
    ~/nccl_goal_generator/third_party/LogGOPSim-1.0/LogGOPSim
    ```
-4. **Graphviz**
 
-   - [Graphviz website](https://graphviz.org/).
-   - For goal file visualization.
-   - To install:
-
+### 3.3 Install nccl_goal_generator
    ```bash
-   wget https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/12.2.1/rocky_8.9_graphviz-12.2.1-cmake.rpm
-   mkdir -p ~/graphviz
-   rpm2cpio rocky_8.9_graphviz-12.2.1-cmake.rpm | cpio -idmv -D ~/graphviz
+   cd $HOME/nccl_goal_generator
+   pip install -e .
 
-   echo 'export PATH=~/graphviz/usr/bin:$PATH' >> ~/.bashrc
-   echo 'export LD_LIBRARY_PATH=~/graphviz/usr/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
-   source ~/.bashrc
+   ## To verify the installation:
+   which nccl_goal_generator 
+   ## A successful installation should output like:
+   ~/anaconda3/bin/nccl_goal_generator
    ```
 
 ## 4. Usage Introduction
@@ -135,10 +131,14 @@ Steps to use the toolchain include:
    srun bash run_ds.sh
 
    ## Modified command that uses the toolchain
-   python3 run_generator.py --training_script run_ds.sh --results_dir results --config_node_gpu node_gpu_config.yaml
+   nccl_goal_generator --training_script run_ds.sh --results_dir results --config_node_gpu node_gpu_config.yaml
    ```
 
 ### 4.2 Arguments
 - `--training_script`: Path to the training script that can run in step 1.
 - `--results_dir`: Path for the compiled goal file (bin file).
 - `--config_node_gpu`: Path for the user specified nodes and GPUs configuration. (The total number of GPUs you specify should be equal to the GPUs used for tracing)
+
+## 5. TODO
+- Apply NPKit estimated probablistic model for reduction time to trace generator
+- For different streams on a node, add `cpu <streamID>` for the calc time
