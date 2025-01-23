@@ -22,13 +22,13 @@ srun nvidia-smi -L
 # export NCCL_TOPO_DUMP_FILE="/tmp/results/Topology_Intra_Node.txt" ## NCCL_PARAM(TopoDumpFileRank, "TOPO_DUMP_FILE_RANK", 0);
 # export NCCL_GRAPH_DUMP_FILE="/tmp/results/Graph.txt" ## NCCL_PARAM(GraphDumpFileRank, "GRAPH_DUMP_FILE_RANK", 0);
 
-rm -rf "$HOME/DeepSpeedExamples/training/HelloDeepSpeed/experiment_deepspeed"
-mkdir -p "$HOME/DeepSpeedExamples/training/HelloDeepSpeed/experiment_deepspeed"
+rm -rf "/users/zhu/DeepSpeedExamples/training/HelloDeepSpeed/experiment_deepspeed"
+mkdir -p "/users/zhu/DeepSpeedExamples/training/HelloDeepSpeed/experiment_deepspeed"
 # pip install -r requirements.txt
 
-export LD_PRELOAD=$HOME/nccl_goal_generator/third_party/nccl_nvtx/nccl/build/lib/libnccl.so
+export LD_PRELOAD=/users/zhu/nccl_goal_generator/third_party/nccl_nvtx/nccl/build/lib/libnccl.so
 
-cd ../src
 
-python3 run_generator.py --training_script ../example/run_ds.sh --results_dir ../example/results --config_node_gpu ../example/node_gpu_config.yaml
-# python3 run_generator.py --training_script ../example/run_ds.sh --results_dir ../example/results
+# srun bash ../example/run_ds.sh
+nccl_goal_generator --training_script ../example/run_ds.sh --results_dir ../example/results --config_node_gpu ../example/node_gpu_config.yaml
+# nccl_goal_generator --training_script ../example/run_ds.sh --results_dir ../example/results

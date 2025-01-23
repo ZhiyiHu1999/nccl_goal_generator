@@ -4,7 +4,6 @@ import tempfile
 import os
 
 from .get_traced_events import main as get_traced_events_main
-from .goal2dot import main as goal2dot_main
 
 def main():
     parser = argparse.ArgumentParser()
