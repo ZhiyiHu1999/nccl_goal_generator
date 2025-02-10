@@ -5,6 +5,9 @@ import json
 import math
 import sqlite3
 import re
+import numpy as np
+import random
+from scipy import interpolate
 
 from collections import defaultdict
 from queue import Queue
@@ -972,19 +975,99 @@ def check_events_pair(events):
 
     return events_pair
 
-def expand_group_events(events):
-    expanded_events = {}
+# def expand_group_events(events):
+#     expanded_events = {}
 
-    for goal_rank, goal_events in events.items():
-        expanded_events[goal_rank] = {}
+#     for goal_rank, goal_events in events.items():
+#         expanded_events[goal_rank] = {}
+#         for gpuId, gpu_events in goal_events.items():
+#             expanded_events[goal_rank][gpuId] = {}
+#             for streamId, stream_events in gpu_events.items():
+#                 expanded_events[goal_rank][gpuId][streamId] = []
+#                 for event in stream_events:
+#                     if event['event_type'] == 'GroupColl':
+#                         for coll_event in event['coll_events']:
+#                             expanded_events[goal_rank][gpuId][streamId].append(
+#                                 {
+#                                     'event_type': event['coll_type'],
+#                                     'commId': event['commId'],
+#                                     'comm_index': event['comm_index'],
+#                                     'streamId': event['streamId'],
+#                                     'my_rank': event['my_rank'],
+#                                     'gpuId': event['gpuId'],
+#                                     'ts_start': event['ts_start'],
+#                                     'algorithm': coll_event['algorithm'],
+#                                     'protocol': coll_event['protocol'],
+#                                     'data_size': coll_event['data_size'],
+#                                     'type_size': coll_event['type_size'],
+#                                     'root': coll_event['root'],
+#                                     'red_op': coll_event['red_op'],
+#                                     'seq': coll_event['seq'],
+#                                     'chunkSteps': coll_event['chunkSteps'],
+#                                     'sliceSteps': coll_event['sliceSteps'],
+#                                     'stepSize': coll_event['stepSize'],
+#                                     'elems': coll_event['elems'],
+#                                     'ts_end': event['ts_end'],
+#                                     'ts_kernel': event['ts_kernel'],
+#                                     'ts_gpu_start': event['ts_gpu_start'],
+#                                     'ts_gpu_end': event['ts_gpu_end']
+#                                 }
+#                             )
+                    
+#                     elif event['event_type'] == 'GroupP2P':
+#                         for p2p_event in event['P2P_events']:
+#                             expanded_events[goal_rank][gpuId][streamId].append(
+#                                 {
+#                                     'event_type': p2p_event['p2p_type'],
+#                                     'commId': event['commId'],
+#                                     'comm_index': event['comm_index'],
+#                                     'streamId': event['streamId'],
+#                                     'my_rank': event['my_rank'],
+#                                     'gpuId': event['gpuId'],
+#                                     'ts_start': event['ts_start'],
+#                                     'peer_rank': p2p_event['peer_rank'],
+#                                     'protocol': p2p_event['protocol'],
+#                                     'countHi32': p2p_event['countHi32'],
+#                                     'countLo32': p2p_event['countLo32'],
+#                                     'chunkSize': p2p_event['chunkSize'],
+#                                     'count': p2p_event['count'],
+#                                     'data_size': p2p_event['count'],
+#                                     'seq': p2p_event['seq'],
+#                                     'ts_end': event['ts_end'],
+#                                     'ts_kernel': event['ts_kernel'],
+#                                     'ts_gpu_start': event['ts_gpu_start'],
+#                                     'ts_gpu_end': event['ts_gpu_end']
+#                                 }
+#                             )
+
+#                     else:
+#                         expanded_events[goal_rank][gpuId][streamId].append(event)
+
+#     for goal_rank, goal_events in expanded_events.items():
+#         for gpuId, gpu_events in goal_events.items():
+#             for streamId, stream_events in gpu_events.items():
+#                 print(f'goal_rank: {goal_rank}, gpuId: {gpuId}, streamId: {streamId}, num_events: {len(expanded_events[goal_rank][gpuId][streamId])}')
+
+#     return expanded_events
+
+def get_events_parallel_group(nccl_events):
+    nccl_events_group = {}
+
+    for goal_rank, goal_events in nccl_events.items():
+        nccl_events_group[goal_rank] = {}
         for gpuId, gpu_events in goal_events.items():
-            expanded_events[goal_rank][gpuId] = {}
+            nccl_events_group[goal_rank][gpuId] = {}
             for streamId, stream_events in gpu_events.items():
-                expanded_events[goal_rank][gpuId][streamId] = []
-                for event in stream_events:
+                nccl_events_group[goal_rank][gpuId][streamId] = []
+                for event_index, event in enumerate(stream_events):
                     if event['event_type'] == 'GroupColl':
+                        events_group = {}    
+                        events_group['events'] = []
+                        events_group['ts_group_host_start'] = event['ts_start']
+                        events_group['ts_group_gpu_end'] = event['ts_gpu_end']
+
                         for coll_event in event['coll_events']:
-                            expanded_events[goal_rank][gpuId][streamId].append(
+                            events_group['events'].append(
                                 {
                                     'event_type': event['coll_type'],
                                     'commId': event['commId'],
@@ -1010,10 +1093,17 @@ def expand_group_events(events):
                                     'ts_gpu_end': event['ts_gpu_end']
                                 }
                             )
-                    
+
+                        nccl_events_group[goal_rank][gpuId][streamId].append(events_group)
+
                     elif event['event_type'] == 'GroupP2P':
+                        events_group = {}    
+                        events_group['events'] = []
+                        events_group['ts_group_host_start'] = event['ts_start']
+                        events_group['ts_group_gpu_end'] = event['ts_gpu_end']
+
                         for p2p_event in event['P2P_events']:
-                            expanded_events[goal_rank][gpuId][streamId].append(
+                            events_group['events'].append(
                                 {
                                     'event_type': p2p_event['p2p_type'],
                                     'commId': event['commId'],
@@ -1037,50 +1127,106 @@ def expand_group_events(events):
                                 }
                             )
 
-                    else:
-                        expanded_events[goal_rank][gpuId][streamId].append(event)
-
-    for goal_rank, goal_events in expanded_events.items():
-        for gpuId, gpu_events in goal_events.items():
-            for streamId, stream_events in gpu_events.items():
-                print(f'goal_rank: {goal_rank}, gpuId: {gpuId}, streamId: {streamId}, num_events: {len(expanded_events[goal_rank][gpuId][streamId])}')
-
-    return expanded_events
-
-def get_events_parallel_group(nccl_events):
-    nccl_events_group = {}
-
-    for goal_rank, goal_events in nccl_events.items():
-        nccl_events_group[goal_rank] = {}
-        for gpuId, gpu_events in goal_events.items():
-            nccl_events_group[goal_rank][gpuId] = {}
-            for streamId, stream_events in gpu_events.items():
-                nccl_events_group[goal_rank][gpuId][streamId] = []
-                for event_index, event in enumerate(stream_events):
-                    if event_index == 0:
-                        events_group = {}    
-                        events_group['events'] = []
-                        events_group['events'].append(event)
-                        events_group['ts_group_host_start'] = event['ts_start']
-                        events_group['ts_group_gpu_end'] = event['ts_gpu_end']
-
-                    elif events_group['ts_group_gpu_end'] > event['ts_start']:
-                        events_group['events'].append(event)
-                        events_group['ts_group_gpu_end'] = event['ts_gpu_end']
+                        nccl_events_group[goal_rank][gpuId][streamId].append(events_group)
 
                     else: 
-                        nccl_events_group[goal_rank][gpuId][streamId].append(events_group)
                         events_group = {}    
                         events_group['events'] = []
-                        events_group['events'].append(event)
                         events_group['ts_group_host_start'] = event['ts_start']
                         events_group['ts_group_gpu_end'] = event['ts_gpu_end']
 
-                    if event_index == len(stream_events) - 1:
+                        events_group['events'].append(event)
+
                         nccl_events_group[goal_rank][gpuId][streamId].append(events_group)
 
     return nccl_events_group
 
+def get_nccl_btree(nranks, rank):
+    up, down0, down1 = -1, -1, -1
+    parent_child_type = -1
+
+    # Find the highest set bit in the rank
+    bit = 1
+    while bit < nranks:
+        if bit & rank:
+            break
+        bit <<= 1
+
+    if rank == 0:
+        # Root node has no parent or left child
+        up = -1
+        down0 = -1
+        # Right child is the first node in the second tree
+        down1 = bit >> 1 if nranks > 1 else -1
+        return {
+            "u": up,
+            "d0": down0,
+            "d1": down1,
+            "parent_child_type": -1  # Root has no parent
+        }
+
+    # Calculate parent (up)
+    up = (rank ^ bit) | (bit << 1)
+    if up >= nranks:
+        up = rank ^ bit
+
+    # Determine parent-child relationship type
+    parent_child_type = 0 if rank < up else 1
+
+    # Calculate children (down0 and down1)
+    lowbit = bit >> 1
+    down0 = rank - lowbit if lowbit != 0 else -1
+    down1 = rank + lowbit if lowbit != 0 else -1
+
+    # Ensure down1 is within bounds
+    while down1 >= nranks:
+        lowbit >>= 1
+        down1 = rank + lowbit if lowbit != 0 else -1
+
+    return {
+        "u": up,
+        "d0": down0,
+        "d1": down1,
+        "parent_child_type": parent_child_type
+    }
+
+
+def get_nccl_dtree(nranks, rank):
+    # First tree (binary tree)
+    tree0 = get_nccl_btree(nranks, rank)
+    s0 = tree0["u"]
+    d0_0 = tree0["d0"]
+    d0_1 = tree0["d1"]
+    parent_child_type0 = tree0["parent_child_type"]
+
+    # Second tree (mirror or shift)
+    if nranks % 2 == 1:
+        # Shift logic
+        shiftrank = (rank - 1 + nranks) % nranks
+        tree1 = get_nccl_btree(nranks, shiftrank)
+        s1 = -1 if tree1["u"] == -1 else (tree1["u"] + 1) % nranks
+        d1_0 = -1 if tree1["d0"] == -1 else (tree1["d0"] + 1) % nranks
+        d1_1 = -1 if tree1["d1"] == -1 else (tree1["d1"] + 1) % nranks
+        parent_child_type1 = tree1["parent_child_type"]
+    else:
+        # Mirror logic
+        mirrorrank = nranks - 1 - rank
+        tree1 = get_nccl_btree(nranks, mirrorrank)
+        s1 = -1 if tree1["u"] == -1 else nranks - 1 - tree1["u"]
+        d1_0 = -1 if tree1["d0"] == -1 else nranks - 1 - tree1["d0"]
+        d1_1 = -1 if tree1["d1"] == -1 else nranks - 1 - tree1["d1"]
+        parent_child_type1 = tree1["parent_child_type"]
+
+    return {
+        "s0": s0,
+        "d0_0": d0_0,
+        "d0_1": d0_1,
+        "parent_child_type0": parent_child_type0,
+        "s1": s1,
+        "d1_0": d1_0,
+        "d1_1": d1_1,
+        "parent_child_type1": parent_child_type1
+    }
 
 def apply_user_config(yaml_file, events_parallel_group, comm_init_events, comm_Info):
     num_gpus_traced = 0
@@ -1141,9 +1287,130 @@ def apply_user_config(yaml_file, events_parallel_group, comm_init_events, comm_I
                 comm_init_events[goal_rank][gpuId] = gpu_comm_init_events[gpuId]
 
             for commId in comm_Info.keys():
-                for rank in comm_Info[commId]['rank_To_rankInfo'].keys():
-                    comm_Info[commId]['rank_To_rankInfo'][rank]['goal_rank'] = gpuId_to_goal[comm_Info[commId]['rank_To_rankInfo'][rank]['gpuId']]
-                    comm_Info[commId]['rank_To_rankInfo'][rank].pop('host_name', None)
+                for rank in comm_Info[commId]["rank_To_rankInfo"].keys():
+                    comm_Info[commId]["rank_To_rankInfo"][rank]["goal_rank"] = gpuId_to_goal[comm_Info[commId]["rank_To_rankInfo"][rank]["gpuId"]]
+                    comm_Info[commId]["rank_To_rankInfo"][rank].pop("host_name", None)
+
+            ## Restructure the Ring/Tree topology
+            for commId in comm_Info.keys():
+                comm_config = {}
+                for rank in comm_Info[commId]["rank_To_rankInfo"].keys():
+                    gpuId = comm_Info[commId]["rank_To_rankInfo"][rank]["gpuId"]
+                    goal_rank = comm_Info[commId]["rank_To_rankInfo"][rank]["goal_rank"]
+
+                    if goal_rank not in comm_config:
+                        comm_config[goal_rank] = []
+
+                    comm_config[goal_rank].append(gpuId)
+
+                sorted_goal_rank = sorted(comm_config.keys())  ## Build chain within the node from lower gpuId to higher gpuId
+                sorted_comm_config = {goal_rank: sorted(comm_config[goal_rank]) for goal_rank in sorted_goal_rank}
+                comm_config = sorted_comm_config
+                # print(comm_config)
+
+                ## Build Ring/Tree between nodes
+                topo_info = {}
+                for goal_rank in comm_config.keys():
+                    topo_info[goal_rank] = {}
+                    topo_info[goal_rank]['gpu_list'] = comm_config[goal_rank]
+                    topo_info[goal_rank]['Ring'] = {}
+                    topo_info[goal_rank]['Tree_0'] = {}
+                    topo_info[goal_rank]['Tree_1'] = {}
+
+                goal_list = list(comm_config.keys())
+                num_goal_rank = len(goal_list)
+                for i in range(num_goal_rank):
+                    goal_rank = goal_list[i]
+                    topo_info[goal_rank]['Ring']['next_goal_rank'] = goal_list[(i + 1) % num_goal_rank]
+                    topo_info[goal_rank]['Ring']['last_goal_rank'] = goal_list[(i - 1) % num_goal_rank]
+
+                    DTree = get_nccl_dtree(num_goal_rank, i)
+
+                    topo_info[goal_rank]['Tree_0']['parent_goal_rank'] = goal_list[DTree['s0']] if DTree['s0'] != -1 else -1
+                    topo_info[goal_rank]['Tree_0']['child_1_goal_rank'] = goal_list[DTree['d0_0']] if DTree['d0_0'] != -1 else -1
+                    topo_info[goal_rank]['Tree_0']['child_2_goal_rank'] = goal_list[DTree['d0_1']] if DTree['d0_1'] != -1 else -1
+
+                    topo_info[goal_rank]['Tree_1']['parent_goal_rank'] = goal_list[DTree['s1']] if DTree['s1'] != -1 else -1
+                    topo_info[goal_rank]['Tree_1']['child_1_goal_rank'] = goal_list[DTree['d1_0']] if DTree['d1_0'] != -1 else -1
+                    topo_info[goal_rank]['Tree_1']['child_2_goal_rank'] = goal_list[DTree['d1_1']] if DTree['d1_1'] != -1 else -1
+
+                # print(topo_info)
+
+                gpuId_To_rank = comm_Info[commId]["gpuId_To_rank"]
+                nranks = comm_Info[commId]["nranks"]
+                # for rank in comm_Info[commId]["rank_To_rankInfo"].keys():
+                #     gpuId = comm_Info[commId]["rank_To_rankInfo"][rank]["gpuId"]
+                #     goal_rank = comm_Info[commId]["rank_To_rankInfo"][rank]["goal_rank"]
+
+                for goal_rank in topo_info.keys():
+                    gpuId_list = topo_info[goal_rank]['gpu_list']
+                    for i in range(len(gpuId_list)):
+                        gpuId = gpuId_list[i]
+                        rank = gpuId_To_rank[gpuId]
+
+                        for ring_topo in comm_Info[commId]["rank_To_rankInfo"][rank]['channel_info']["Ring"]:  ## Restructure Ring Topology
+                            last_ring_goal_rank = topo_info[goal_rank]['Ring']['last_goal_rank']
+                            next_ring_goal_rank = topo_info[goal_rank]['Ring']['next_goal_rank']
+                            ring_topo["previous_rank"] = gpuId_list[i - 1] if i - 1 >= 0 else topo_info[last_ring_goal_rank]['gpu_list'][-1]
+                            ring_topo["previous_rank"] = gpuId_To_rank[ring_topo["previous_rank"]]
+                            ring_topo["next_rank"] = gpuId_list[i + 1] if i + 1 <= len(gpuId_list) -1 else topo_info[next_ring_goal_rank]['gpu_list'][0]
+                            ring_topo["next_rank"] = gpuId_To_rank[ring_topo["next_rank"]]
+
+                        for tree_id, tree_topo in enumerate(comm_Info[commId]["rank_To_rankInfo"][rank]['channel_info']["Tree"]):
+                            tree_topo['parent_rank'] = "-1"
+                            tree_topo['child_1_rank'] = "-1"
+                            tree_topo['child_2_rank'] = "-1"
+                            tree_topo['child_3_rank'] = "-1"
+
+                            if tree_id % 2 == 0:  ## use Tree_0
+                                parent_tree_goal_rank = topo_info[goal_rank]['Tree_0']['parent_goal_rank']
+                                child_1_tree_goal_rank = topo_info[goal_rank]['Tree_0']['child_1_goal_rank']
+                                child_2_tree_goal_rank = topo_info[goal_rank]['Tree_0']['child_2_goal_rank']
+
+                            elif tree_id % 2 == 1:  ## use Tree_1
+                                parent_tree_goal_rank = topo_info[goal_rank]['Tree_1']['parent_goal_rank']
+                                child_1_tree_goal_rank = topo_info[goal_rank]['Tree_1']['child_1_goal_rank']
+                                child_2_tree_goal_rank = topo_info[goal_rank]['Tree_1']['child_2_goal_rank']
+
+                            child_rank_list = []
+
+                            if (i - 1) >= 0:
+                                child_gpuId = gpuId_list[i - 1]
+                                child_rank = gpuId_To_rank[child_gpuId]
+                                child_rank_list.append(child_rank)
+
+                            else:
+                                if child_1_tree_goal_rank != -1:
+                                    child_gpuId = topo_info[child_1_tree_goal_rank]['gpu_list'][-1]
+                                    child_rank = gpuId_To_rank[child_gpuId]
+                                    child_rank_list.append(child_rank)
+
+                                if child_2_tree_goal_rank != -1:
+                                    child_gpuId = topo_info[child_2_tree_goal_rank]['gpu_list'][-1]
+                                    child_rank = gpuId_To_rank[child_gpuId]
+                                    child_rank_list.append(child_rank)
+
+                            for child_id in range(len(child_rank_list)):
+                                if child_id == 0: 
+                                    tree_topo['child_1_rank'] = child_rank_list[child_id]
+
+                                elif child_id == 1: 
+                                    tree_topo['child_2_rank'] = child_rank_list[child_id]
+
+                                elif child_id == 2: 
+                                    tree_topo['child_3_rank'] = child_rank_list[child_id]
+
+                            if (i + 1) <= len(gpuId_list) -1:
+                                parent_gpuId = gpuId_list[i + 1]
+                                parent_rank = gpuId_To_rank[parent_gpuId]
+                                tree_topo['parent_rank'] = parent_rank
+
+                            else:
+                                if parent_tree_goal_rank != -1:
+                                    parent_gpuId = topo_info[parent_tree_goal_rank]['gpu_list'][0]
+                                    parent_rank = gpuId_To_rank[parent_gpuId]
+                                    tree_topo['parent_rank'] = parent_rank
+
 
         else:
             print('no configuration in config file')
@@ -1225,11 +1492,75 @@ def modRanks(r, nranks):
 def div_up(x, y):
     return (x + y - 1) // y       
 
-def get_reduction_time(data_size):
-    return data_size//10  ## us
+# def get_reduction_time(data_size):
+#     return data_size//10  ## us
 
-def get_copy_time(data_size):
-    return data_size//10  ## us
+def get_reduction_time(data_size, protocol):  ## data_size: size of data, not data + flag
+    if protocol == '2':
+        with open('npkit_data_summary_Simple.json', 'r') as file:
+            data = json.load(file)
+
+    elif protocol == '0':
+        with open('npkit_data_summary_LL.json', 'r') as file:
+            data = json.load(file)
+
+    if str(data_size) in data['NPKIT_EVENT_GPU_RECV_REDUCE_SEND']:
+        reduction_times = data['NPKIT_EVENT_GPU_RECV_REDUCE_SEND'][str(data_size)]
+        return random.choice(reduction_times)
+
+    sizes = [int(size) for size in data['NPKIT_EVENT_GPU_RECV_REDUCE_SEND'].keys()]
+    sizes.sort()
+
+    if data_size < sizes[0]:
+        return random.choice(data['NPKIT_EVENT_GPU_RECV_REDUCE_SEND'][str(sizes[0])])
+    if data_size > sizes[-1]:
+        return random.choice(data['NPKIT_EVENT_GPU_RECV_REDUCE_SEND'][str(sizes[-1])])
+
+    f = interpolate.interp1d(sizes, [np.mean(data['NPKIT_EVENT_GPU_RECV_REDUCE_SEND'][str(size)]) for size in sizes], kind='linear', fill_value="extrapolate")
+    interpolated_value = f(data_size)
+    
+    return int(random.gauss(interpolated_value, interpolated_value * 0.1))
+
+# def get_copy_time(data_size):
+#     return data_size//10  ## us
+
+def get_copy_time(data_size, protocol):  ## data_size: size of data, not data + flag
+    if protocol == '2':
+        with open('npkit_data_summary_Simple.json', 'r') as file:
+            data = json.load(file)
+
+    elif protocol == '0':
+        with open('npkit_data_summary_LL.json', 'r') as file:
+            data = json.load(file)
+
+    if str(data_size) in data['NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND']:
+        reduction_times = data['NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND'][str(data_size)]
+        return random.choice(reduction_times)
+
+    sizes = [int(size) for size in data['NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND'].keys()]
+    sizes.sort()
+
+    if data_size < sizes[0]:
+        return random.choice(data['NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND'][str(sizes[0])])
+    if data_size > sizes[-1]:
+        return random.choice(data['NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND'][str(sizes[-1])])
+
+    f = interpolate.interp1d(sizes, [np.mean(data['NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND'][str(size)]) for size in sizes], kind='linear', fill_value="extrapolate")
+    interpolated_value = f(data_size)
+    
+    return int(random.gauss(interpolated_value, interpolated_value * 0.1))
+
+def get_intra_node_gpu_transfer_time(data_size, transfer_type):  
+    """
+    data_size [byte]: data + flag, not just data
+    Here we use the bandwidth of NVLink 1.0, which is 20 GT/s , each transfer is 1 byte
+    """
+
+    if transfer_type == 'Send':
+        return data_size * 10**6 // (20 * 10**9 * 1)  ## us
+
+    elif transfer_type == 'Recv':
+        return 0
 
 def get_event_type(operation):
     if operation == 'AllReduce':
@@ -1274,7 +1605,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                     last_group_event_end_id = node_start_calc_id
                     for group_event_index, group_event in enumerate(stream_events): 
                         task_counter += 1
-                        file.write(f'l{task_counter}: calc {group_event['ts_group_host_start'] - last_group_event_end_time}\n')  ## Calc between first group host event start and last group gpu event end
+                        file.write(f'l{task_counter}: calc {max(group_event['ts_group_host_start'] - last_group_event_end_time, 0)}\n')  ## Calc between first group host event start and last group gpu event end
                         file.write(f'l{task_counter} requires l{last_group_event_end_id}\n')
                         group_event_start_calc_id = task_counter
 
@@ -1461,7 +1792,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                         SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto)}\n')
                                                         file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                         
                                                         task_counter += 1
@@ -1489,7 +1820,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                                 SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_reduction_time(nelem)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto)}\n')
                                                                 file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                 
                                                                 task_counter += 1
@@ -1521,7 +1852,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                     SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem) + get_copy_time(nelem)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto) + get_copy_time(nelem * type_size, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     
                                                     task_counter += 1
@@ -1549,7 +1880,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                             SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_reduction_time(nelem) + get_copy_time(nelem)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto) + get_copy_time(sliceSize * type_size, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             
                                                             task_counter += 1
@@ -1582,7 +1913,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                         SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem * type_size, proto)}\n')
                                                         file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                         
                                                         task_counter += 1
@@ -1610,7 +1941,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                                 SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size, proto)}\n')
                                                                 file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                 
                                                                 task_counter += 1
@@ -1704,7 +2035,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                     nelem = 0 if nelem < 0 else nelem
                                                     if proto == '0':
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem) + get_copy_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto) + get_copy_time(nelem * type_size, proto)}\n')
                                                         calc_task_id = task_counter
 
                                                         for child_Ix in [child_1_Ix, child_2_Ix, child_3_Ix]:
@@ -1735,7 +2066,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                                 sliceSize = sliceSize if sliceSize < nelem-offset else nelem-offset
 
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_reduction_time(nelem) + get_copy_time(nelem)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto) + get_copy_time(sliceSize * type_size, proto)}\n')
                                                                 calc_task_id = task_counter
 
                                                                 for child_Ix in [child_1_Ix, child_2_Ix, child_3_Ix]:
@@ -1817,7 +2148,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                     if proto == '0':
                                                         ## RecvReduceSend
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto)}\n')
                                                         calc_task_id = task_counter
 
                                                         for child_Ix in [child_1_Ix, child_2_Ix, child_3_Ix]:
@@ -1838,7 +2169,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
 
                                                         ## RecvCopySend
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem * type_size, proto)}\n')
                                                         calc_task_id = task_counter
 
                                                         task_counter += 1
@@ -1870,7 +2201,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
 
                                                                 ## RecvReduceSend
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto)}\n')
                                                                 calc_task_id = task_counter
 
                                                                 for child_Ix in [child_1_Ix, child_2_Ix, child_3_Ix]:
@@ -1891,7 +2222,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
 
                                                                 ## RecvCopySend
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size, proto)}\n')
                                                                 calc_task_id = task_counter
 
                                                                 task_counter += 1
@@ -2028,7 +2359,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                     SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_copy_time(nelem, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     
                                                     task_counter += 1
@@ -2056,7 +2387,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                             SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             
                                                             task_counter += 1
@@ -2148,7 +2479,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                     SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_copy_time(nelem, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     
                                                     task_counter += 1
@@ -2176,7 +2507,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                             SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             
                                                             task_counter += 1
@@ -2301,7 +2632,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                     SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     
                                                     task_counter += 1
@@ -2329,7 +2660,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                             SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             
                                                             task_counter += 1
@@ -2354,7 +2685,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                 SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                 task_counter += 1
-                                                file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size)}\n')
+                                                file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto)}\n')
                                                 file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -2376,7 +2707,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                                                         SendRecvEvents_To_TaskCounter[goal_rank][gpuId][commId][event['event_type']][event['seq']][channel_id]['recv'][prevIx].append(task_counter)
 
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto)}\n')
                                                         file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -2424,7 +2755,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                     last_group_event_end_id = node_start_calc_id
                     for group_event_index, group_event in enumerate(stream_events): 
                         task_counter += 1
-                        file.write(f'l{task_counter}: calc {group_event['ts_group_host_start'] - last_group_event_end_time}\n')  ## Calc between first group host event start and last group gpu event end
+                        file.write(f'l{task_counter}: calc {max(group_event['ts_group_host_start'] - last_group_event_end_time, 0)}\n')  ## Calc between first group host event start and last group gpu event end
                         file.write(f'l{task_counter} requires l{last_group_event_end_id}\n')
                         group_event_start_calc_id = task_counter
 
@@ -2488,7 +2819,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                 file.write(f'l{task_counter}: send {nelem}b to {goal_rank_peer} tag {tag}\n')
                                                 p2p_index[p2p_peer_Ix] += 1
                                             else:
-                                                file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(nelem, 'Send')}\n')
 
                                         elif p2p_event_type == 'Recv':
                                             if goal_rank_peer != goal_rank:
@@ -2496,7 +2827,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                 file.write(f'l{task_counter}: recv {nelem}b from {goal_rank_peer} tag {tag}\n')
                                                 p2p_index[p2p_peer_Ix] += 1
                                             else:
-                                                file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(nelem, 'Recv')}\n')
 
                                         file.write(f'l{task_counter} requires l{p2p_group_start_calc_id}\n')
                                         file.write(f'l{p2p_group_end_calc_id} requires l{task_counter}\n')
@@ -2571,7 +2902,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         send_index[nextIx] += 1
 
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem * type_size)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -2595,7 +2926,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 send_index[nextIx] += 1
 
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                 send_index[nextIx] += 1
@@ -2624,11 +2955,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             recv_index[prevIx] += 1
 
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto)}\n')
                                                         file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                         
                                                         task_counter += 1
@@ -2640,7 +2971,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             send_index[nextIx] += 1
 
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -2663,11 +2994,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     recv_index[prevIx] += 1
 
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_reduction_time(nelem)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto)}\n')
                                                                 file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                 
                                                                 task_counter += 1
@@ -2679,7 +3010,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     send_index[nextIx] += 1
 
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -2706,11 +3037,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         recv_index[prevIx] += 1
                                                     
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem) + get_copy_time(nelem)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto) + get_copy_time(nelem * type_size, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     
                                                     task_counter += 1
@@ -2722,7 +3053,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         send_index[nextIx] += 1
 
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                         file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -2745,11 +3076,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 recv_index[prevIx] += 1
 
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_reduction_time(nelem) + get_copy_time(nelem)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto) + get_copy_time(sliceSize * type_size, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             
                                                             task_counter += 1
@@ -2761,7 +3092,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 send_index[nextIx] += 1
 
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                                 file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             
@@ -2789,11 +3120,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             recv_index[prevIx] += 1
 
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem * type_size, proto)}\n')
                                                         file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                         
                                                         task_counter += 1
@@ -2805,7 +3136,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             send_index[nextIx] += 1
 
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -2828,11 +3159,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     recv_index[prevIx] += 1
 
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size, proto)}\n')
                                                                 file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                 
                                                                 task_counter += 1
@@ -2844,7 +3175,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     send_index[nextIx] += 1
 
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                 
@@ -2872,7 +3203,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         recv_index[prevIx] += 1
 
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -2896,7 +3227,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 recv_index[prevIx] += 1
                                                             
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -2955,7 +3286,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                     nelem = 0 if nelem < 0 else nelem
                                                     if proto == '0':
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size) + get_copy_time(nelem * type_size)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto) + get_copy_time(nelem * type_size, proto)}\n')
                                                         calc_task_id = task_counter
 
                                                         for child_Ix in [child_1_Ix, child_2_Ix, child_3_Ix]:
@@ -2972,7 +3303,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     recv_index[child_Ix] += 1
 
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                     file.write(f'l{calc_task_id} requires l{task_counter}\n')
 
@@ -2985,7 +3316,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     send_index[child_Ix] += 1
 
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                                     file.write(f'l{task_counter} requires l{calc_task_id}\n')
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3001,7 +3332,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 sliceSize = sliceSize if sliceSize < nelem-offset else nelem-offset
 
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size) + get_copy_time(sliceSize * type_size)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto) + get_copy_time(sliceSize * type_size, proto)}\n')
                                                                 calc_task_id = task_counter
 
                                                                 for child_Ix in [child_1_Ix, child_2_Ix, child_3_Ix]:
@@ -3018,7 +3349,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                             recv_index[child_Ix] += 1
 
                                                                         else:
-                                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                             file.write(f'l{calc_task_id} requires l{task_counter}\n')
 
@@ -3031,7 +3362,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                             send_index[child_Ix] += 1
 
                                                                         else:
-                                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                                             file.write(f'l{task_counter} requires l{calc_task_id}\n')
                                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                 
@@ -3054,7 +3385,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             send_index[parent_Ix] += 1
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3066,7 +3397,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             recv_index[parent_Ix] += 1
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3089,7 +3420,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                     send_index[parent_Ix] += 1
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3101,7 +3432,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                     recv_index[parent_Ix] += 1
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3118,7 +3449,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                     if proto == '0':
                                                         ## RecvReduceSend
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto)}\n')
                                                         calc_task_id = task_counter
 
                                                         for child_Ix in [child_1_Ix, child_2_Ix, child_3_Ix]:
@@ -3134,7 +3465,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     file.write(f'l{calc_task_id} requires l{task_counter}\n')
                                                                     recv_index[child_Ix] += 1
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                     file.write(f'l{calc_task_id} requires l{task_counter}\n')
                                     
@@ -3146,13 +3477,13 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             send_index[parent_Ix] += 1
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                             file.write(f'l{task_counter} requires l{calc_task_id}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
                                                         ## RecvCopySend
                                                         task_counter += 1
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem * type_size, proto)}\n')
                                                         calc_task_id = task_counter
 
                                                         task_counter += 1
@@ -3164,7 +3495,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             recv_index[parent_Ix] += 1
 
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                             file.write(f'l{calc_task_id} requires l{task_counter}\n')
                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                         
@@ -3181,7 +3512,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                     send_index[child_Ix] += 1
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                                     file.write(f'l{task_counter} requires l{calc_task_id}\n')
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3198,7 +3529,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
 
                                                                 ## RecvReduceSend
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto)}\n')
                                                                 calc_task_id = task_counter
 
                                                                 for child_Ix in [child_1_Ix, child_2_Ix, child_3_Ix]:
@@ -3214,7 +3545,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                             file.write(f'l{calc_task_id} requires l{task_counter}\n')
                                                                             recv_index[child_Ix] += 1
                                                                         else:
-                                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                             file.write(f'l{calc_task_id} requires l{task_counter}\n')
                                             
@@ -3226,13 +3557,13 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                     send_index[parent_Ix] += 1
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                                     file.write(f'l{task_counter} requires l{calc_task_id}\n')
                                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
                                                                 ## RecvCopySend
                                                                 task_counter += 1
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size, proto)}\n')
                                                                 calc_task_id = task_counter
 
                                                                 task_counter += 1
@@ -3243,7 +3574,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                     recv_index[parent_Ix] += 1
                                                                 else:
-                                                                    file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                                     file.write(f'l{calc_task_id} requires l{task_counter}\n')
                                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                 
@@ -3260,7 +3591,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                             send_index[child_Ix] += 1
                                                                         else:
-                                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                                             file.write(f'l{task_counter} requires l{calc_task_id}\n')
                                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                 
@@ -3322,7 +3653,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         send_index[nextIx] += 1
 
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem, 8) * 16, 'Send')}\n')
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3346,7 +3677,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 send_index[nextIx] += 1
 
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize, 'Send')}\n')
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                 send_index[nextIx] += 1
@@ -3368,7 +3699,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         recv_index[prevIx] += 1
 
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem, 8) * 16, 'Recv')}\n')
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3392,7 +3723,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 recv_index[prevIx] += 1
                                                             
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize, 'Recv')}\n')
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3412,11 +3743,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         recv_index[prevIx] += 1
 
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem, 8) * 16, 'Recv')}\n')
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_copy_time(nelem, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     
                                                     task_counter += 1
@@ -3428,7 +3759,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         send_index[nextIx] += 1
 
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem, 8) * 16, 'Send')}\n')
                                                         file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3451,11 +3782,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 recv_index[prevIx] += 1
 
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize, 'Recv')}\n')
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             
                                                             task_counter += 1
@@ -3467,7 +3798,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 send_index[nextIx] += 1
 
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize, 'Send')}\n')
                                                                 file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             
@@ -3524,7 +3855,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                     send_index[nextIx] += 1
                                                 else:
-                                                    file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem, 8) * 16)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem, 8) * 16, 'Send')}\n')
                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3547,7 +3878,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             send_index[nextIx] += 1
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize, 'Send')}\n')
                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3567,11 +3898,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                         recv_index[prevIx] += 1
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem, 8) * 16, 'Recv')}\n')
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_copy_time(nelem)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_copy_time(nelem, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     
                                                     task_counter += 1
@@ -3582,7 +3913,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                         send_index[nextIx] += 1
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem, 8) * 16, 'Send')}\n')
                                                         file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3604,11 +3935,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                 recv_index[prevIx] += 1
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize, 'Recv')}\n')
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             
                                                             task_counter += 1
@@ -3619,7 +3950,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                 send_index[nextIx] += 1
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize, 'Send')}\n')
                                                                 file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             
@@ -3639,7 +3970,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                     recv_index[prevIx] += 1
                                                 else:
-                                                    file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem, 8) * 16)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem, 8) * 16, 'Recv')}\n')
                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3662,7 +3993,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             recv_index[prevIx] += 1
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize, 'Recv')}\n')
                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3719,7 +4050,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                     send_index[nextIx] += 1
                                                 else:
-                                                    file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3742,7 +4073,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             send_index[nextIx] += 1
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3762,11 +4093,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                         recv_index[prevIx] += 1
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                         file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     
                                                     task_counter += 1
@@ -3777,7 +4108,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                         send_index[nextIx] += 1
                                                     else:
-                                                        file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                        file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Send')}\n')
                                                         file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                         file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3799,11 +4130,11 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
                                                                 recv_index[prevIx] += 1
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                                 file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             
                                                             task_counter += 1
@@ -3814,7 +4145,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                                 send_index[nextIx] += 1
                                                             else:
-                                                                file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                                file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Send')}\n')
                                                                 file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                                 file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
                                                             
@@ -3834,16 +4165,16 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                     recv_index[prevIx] += 1
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto) + get_copy_time(nelem * type_size, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
                                                 else:
-                                                    file.write(f'l{task_counter}: calc {get_copy_time(div_up(nelem * type_size, 8) * 16)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(div_up(nelem * type_size, 8) * 16, 'Recv')}\n')
                                                     file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                     task_counter += 1
-                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size)}\n')
+                                                    file.write(f'l{task_counter}: calc {get_reduction_time(nelem * type_size, proto) + get_copy_time(nelem * type_size, proto)}\n')
                                                     file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                     file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3866,16 +4197,16 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                             recv_index[prevIx] += 1
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto) + get_copy_time(sliceSize * type_size, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
                                                         else:
-                                                            file.write(f'l{task_counter}: calc {get_copy_time(sliceSize * type_size)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_intra_node_gpu_transfer_time(sliceSize * type_size, 'Recv')}\n')
                                                             file.write(f'l{task_counter} requires l{gpu_event_start_calc_id}\n')
 
                                                             task_counter += 1
-                                                            file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size)}\n')
+                                                            file.write(f'l{task_counter}: calc {get_reduction_time(sliceSize * type_size, proto) + get_copy_time(sliceSize * type_size, proto)}\n')
                                                             file.write(f'l{task_counter} requires l{task_counter - 1}\n')
                                                             file.write(f'l{gpu_event_end_calc_id} requires l{task_counter}\n')
 
@@ -3923,7 +4254,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                 prev_send_task_counter = prev_event_task_counter[i]
                                                 file.write(f'l{int(my_receive_task_counter)} requires l{int(prev_send_task_counter)}\n')
                                 
-                                elif algo == '0':  ## Ring
+                                elif algo == '0':  ## Tree
                                     commId = event['commId']
                                     myIx = comm_info[commId]['gpuId_To_rank'][gpuId]  ## local rank index in the communicator
                                     channel_info = comm_info[commId]['rank_To_rankInfo'][myIx]['channel_info']['Tree']
@@ -4060,13 +4391,13 @@ def main(config_node_gpu=None, results_dir=None):
         json.dump(Events_Pair, json_file, indent=4)
         json_file.write('\n\n')
 
-    Expanded_Events = expand_group_events(Merged_Events)
-    file_path = os.path.join(Dir_Path, 'nsys_events_expanded_output.json')
-    with open(file_path, 'w') as json_file:
-        json.dump(Expanded_Events, json_file, indent=4)
-        json_file.write('\n\n')
+    # Expanded_Events = expand_group_events(Merged_Events)
+    # file_path = os.path.join(Dir_Path, 'nsys_events_expanded_output.json')
+    # with open(file_path, 'w') as json_file:
+    #     json.dump(Expanded_Events, json_file, indent=4)
+    #     json_file.write('\n\n')
 
-    Events_Parallel_Group = get_events_parallel_group(Expanded_Events)
+    Events_Parallel_Group = get_events_parallel_group(Merged_Events)
     file_path = os.path.join(Dir_Path, 'nsys_events_parallel_group_output.json')
     with open(file_path, 'w') as json_file:
         json.dump(Events_Parallel_Group, json_file, indent=4)
