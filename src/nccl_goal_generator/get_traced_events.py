@@ -8,7 +8,7 @@ import re
 import numpy as np
 import random
 from scipy import interpolate
-
+import importlib.resources
 from collections import defaultdict
 from queue import Queue
 
@@ -1497,11 +1497,11 @@ def div_up(x, y):
 
 def get_reduction_time(data_size, protocol):  ## data_size: size of data, not data + flag
     if protocol == '2':
-        with open('npkit_data_summary_Simple.json', 'r') as file:
+        with importlib.resources.open_text("nccl_goal_generator", "npkit_data_summary_Simple.json") as file:
             data = json.load(file)
 
     elif protocol == '0':
-        with open('npkit_data_summary_LL.json', 'r') as file:
+        with importlib.resources.open_text("nccl_goal_generator", "npkit_data_summary_LL.json") as file:
             data = json.load(file)
 
     if str(data_size) in data['NPKIT_EVENT_GPU_RECV_REDUCE_SEND']:
@@ -1526,11 +1526,11 @@ def get_reduction_time(data_size, protocol):  ## data_size: size of data, not da
 
 def get_copy_time(data_size, protocol):  ## data_size: size of data, not data + flag
     if protocol == '2':
-        with open('npkit_data_summary_Simple.json', 'r') as file:
+        with importlib.resources.open_text("nccl_goal_generator", "npkit_data_summary_Simple.json") as file:
             data = json.load(file)
 
     elif protocol == '0':
-        with open('npkit_data_summary_LL.json', 'r') as file:
+        with importlib.resources.open_text("nccl_goal_generator", "npkit_data_summary_LL.json") as file:
             data = json.load(file)
 
     if str(data_size) in data['NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND']:
