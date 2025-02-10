@@ -7,7 +7,6 @@ results/
 dataset/
 *.sqlite
 *.nsys-rep
-*.json
 *.goal
 *.dot
 *.svg
