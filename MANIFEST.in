@@ -1,0 +1,2 @@
+include src/nccl_goal_generator/npkit_data_summary_Simple.json
+include src/nccl_goal_generator/npkit_data_summary_LL.json
