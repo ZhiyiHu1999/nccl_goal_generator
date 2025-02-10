@@ -147,5 +147,5 @@ Steps to use the toolchain include:
 
 ## 5. TODO
 
-- Apply NPKit estimated probablistic model for reduction time to trace generator
+- ~~Apply NPKit estimated probablistic model for reduction time to trace generator~~
 - For different streams on a node, add `cpu <streamID>` for the calc time
