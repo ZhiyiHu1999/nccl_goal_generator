@@ -1,6 +1,8 @@
 *.o
 *.e
 *.log
+*.tgz
+**/*.tgz
 results/
 dataset/
 *.sqlite
