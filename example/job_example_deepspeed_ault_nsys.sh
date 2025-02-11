@@ -31,5 +31,5 @@ export MKL_THREADING_LAYER=GNU
 export LD_PRELOAD=$HOME/nccl_goal_generator/third_party/nccl_nvtx/nccl/build/lib/libnccl.so
 
 # srun bash ../example/run_ds.sh
-nccl_goal_generator --training_script ../example/run_ds.sh --results_dir ../example/results --config_node_gpu ../example/node_gpu_config.yaml
+nccl_goal_generator --training_script run_ds.sh --results_dir results --config_node_gpu node_gpu_config.yaml
 # nccl_goal_generator --training_script ../example/run_ds.sh --results_dir ../example/results
