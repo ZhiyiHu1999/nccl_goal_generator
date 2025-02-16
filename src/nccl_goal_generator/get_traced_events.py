@@ -19,7 +19,7 @@ def get_nsys_events(dir_path):
     cupti_kernel_results = {}
     HostName_To_GoalRank = {}
     GoalRank_To_NumOfGPUs = {}
-    comm_to_commId = {}
+    commHash_to_commId = {}
     stream_to_streamId = {}
     comm_init_events = {}
     events_counter = {}
@@ -63,24 +63,24 @@ def get_nsys_events(dir_path):
             cursor.execute('SELECT text, start, end FROM NVTX_EVENTS')  ## row[0]: text, row[1]: ts_start, row[2]: ts_end
             nvtx_events_results = cursor.fetchall()
 
-            pattern_Comm_Info = r'comm (\S+) commId (\S+) rank (\d+) nranks (\d+) pid (\d+)'
+            pattern_Comm_Info = r'commHash (\S+) commId (\S+) rank (\d+) nranks (\d+) pid (\d+)'
             pattern_Comm_NumOfChannels = r'(\d+) coll channels, (\d+) nvls channels, (\d+) p2p channels, (\d+) p2p channels per peer, pid (\d+)'
 
-            pattern_Ring = r'comm (\S+) commHash (\S+) Rings \[(\d+)\] (\d+)->(\d+)->(\d+) pid (\d+)'
-            pattern_Tree = r'comm (\S+) commHash (\S+) Trees \[(\d+)\] (-?\d+)/(-?\d+)/(-?\d+)->(-?\d+)->(-?\d+) pid (\d+)'
+            pattern_Ring = r'commHash (\S+) Rings \[(\d+)\] (\d+)->(\d+)->(\d+) pid (\d+)'
+            pattern_Tree = r'commHash (\S+) Trees \[(\d+)\] (-?\d+)/(-?\d+)/(-?\d+)->(-?\d+)->(-?\d+) pid (\d+)'
 
-            pattern_nccl_AllReduce = r'ncclAllReduce\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
-            pattern_nccl_Broadcast = r'ncclBroadcast\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), root (\d+), pid (\d+)'
-            pattern_nccl_AllGather = r'ncclAllGather\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), pid (\d+)'
-            pattern_nccl_ReduceScatter = r'ncclReduceScatter\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
+            pattern_nccl_AllReduce = r'ncclAllReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
+            pattern_nccl_Broadcast = r'ncclBroadcast\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), root (\d+), pid (\d+)'
+            pattern_nccl_AllGather = r'ncclAllGather\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), pid (\d+)'
+            pattern_nccl_ReduceScatter = r'ncclReduceScatter\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
 
-            pattern_nccl_Send = r'ncclSend\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), receiver_rank (\d+), pid (\d+)'
-            pattern_nccl_Recv = r'ncclRecv\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), sender_rank (\d+), pid (\d+)'
+            pattern_nccl_Send = r'ncclSend\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), receiver_rank (\d+), pid (\d+)'
+            pattern_nccl_Recv = r'ncclRecv\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), sender_rank (\d+), pid (\d+)'
 
             pattern_nccl_GroupStart = r'ncclGroupStart\(\): pid (\d+)'
             pattern_nccl_GroupEnd = r'ncclGroupEnd\(\): pid (\d+)'
 
-            pattern_Coll_Info = r'collType (\d+) root (\d+) redOp (\d+) algo (\d+) proto (\d+) comm (\S+) stream (\S+) data_size (\d+) type_size (\d+) chunkSize (\d+) chunkCount (\d+) chunkSteps (\d+) sliceSteps (\d+) stepSize (\d+) pid (\d+)'
+            pattern_Coll_Info = r'collType (\d+) root (\d+) redOp (\d+) algo (\d+) proto (\d+) commHash (\S+) stream (\S+) data_size (\d+) type_size (\d+) chunkSize (\d+) chunkCount (\d+) chunkSteps (\d+) sliceSteps (\d+) stepSize (\d+) pid (\d+)'
             pattern_Coll_Elem = r'nWarps (\d+) count (\d+) chunkCount (\d+) workCount (\d+) lastChunkCount (\d+) workOffset (\d+) pid (\d+)'
 
             pattern_P2P_Elem = r'Bytes (\d+) nWarps (\d+) p2pType (\d+) peer (\d+) proto (\d+) countHi32 (\d+) countLo32 (\d+) chunkSize (\d+) pid (\d+)'
@@ -113,8 +113,8 @@ def get_nsys_events(dir_path):
 
                     match_ncclLaunchKernel = re.search(pattern_ncclKernel, row[0])
 
-                    if match_Comm_Info:
-                        comm = match_Comm_Info.group(1)
+                    if match_Comm_Info:  # 'commHash (\S+) commId (\S+) rank (\d+) nranks (\d+) pid (\d+)'
+                        commHash = match_Comm_Info.group(1)
                         commId = match_Comm_Info.group(2)
                         my_rank = match_Comm_Info.group(3)
                         nranks = match_Comm_Info.group(4)
@@ -134,7 +134,7 @@ def get_nsys_events(dir_path):
                             known_gpus += 1
                             gpuId = known_gpus
                             pid_to_gpuId[pid] = gpuId
-                            comm_to_commId[gpuId] = {}
+                            commHash_to_commId[gpuId] = {}
                             stream_to_streamId[gpuId] = {}
                             Parse_State[gpuId] = 0  ## awaiting P2P or Group operations
                             nccl_events[goal_rank][gpuId] = {}    
@@ -153,7 +153,7 @@ def get_nsys_events(dir_path):
                             }
                         }
 
-                        comm_to_commId[gpuId][comm] = commId
+                        commHash_to_commId[gpuId][commHash] = commId
                         last_commId = commId
 
                         if gpuId not in comm_init_events[goal_rank]:
@@ -165,16 +165,16 @@ def get_nsys_events(dir_path):
                         num_P2P_channels_per_peer = match_Comm_NumOfChannels.group(4)
                         comm_info[last_commId]['NumOfP2PChannelsPerPeer'] = num_P2P_channels_per_peer
 
-                    elif match_Ring:
-                        comm = match_Ring.group(1)
-                        channel_Id = match_Ring.group(3)
-                        previous_rank = match_Ring.group(4)
-                        my_rank = match_Ring.group(5)
-                        next_rank = match_Ring.group(6)
-                        pid = match_Ring.group(7)
+                    elif match_Ring:  ## 'commHash (\S+) Rings \[(\d+)\] (\d+)->(\d+)->(\d+) pid (\d+)'
+                        commHash = match_Ring.group(1)
+                        channel_Id = match_Ring.group(2)
+                        previous_rank = match_Ring.group(3)
+                        my_rank = match_Ring.group(4)
+                        next_rank = match_Ring.group(5)
+                        pid = match_Ring.group(6)
 
                         gpuId = pid_to_gpuId[pid]
-                        commId = comm_to_commId[gpuId][comm]
+                        commId = commHash_to_commId[gpuId][commHash]
                         comm_info[commId]['rank_To_rankInfo'][my_rank]['channel_info']['Ring'].append(
                             {
                                 'previous_rank': previous_rank,
@@ -184,18 +184,18 @@ def get_nsys_events(dir_path):
                             }
                         )
 
-                    elif match_Tree:
-                        comm = match_Tree.group(1)
-                        channel_Id = match_Tree.group(3)
-                        child_1_rank = match_Tree.group(4)
-                        child_2_rank = match_Tree.group(5)
-                        child_3_rank = match_Tree.group(6)
-                        my_rank = match_Tree.group(7)
-                        parent_rank = match_Tree.group(8)
-                        pid = match_Tree.group(9)
+                    elif match_Tree:  ## 'commHash (\S+) Trees \[(\d+)\] (-?\d+)/(-?\d+)/(-?\d+)->(-?\d+)->(-?\d+) pid (\d+)'
+                        commHash = match_Tree.group(1)
+                        channel_Id = match_Tree.group(2)
+                        child_1_rank = match_Tree.group(3)
+                        child_2_rank = match_Tree.group(4)
+                        child_3_rank = match_Tree.group(5)
+                        my_rank = match_Tree.group(6)
+                        parent_rank = match_Tree.group(7)
+                        pid = match_Tree.group(8)
 
                         gpuId = pid_to_gpuId[pid]
-                        commId = comm_to_commId[gpuId][comm]
+                        commId = commHash_to_commId[gpuId][commHash]
                         comm_info[commId]['rank_To_rankInfo'][my_rank]['channel_info']['Tree'].append(
                             {
                                 'child_1_rank': child_1_rank,
@@ -207,8 +207,8 @@ def get_nsys_events(dir_path):
                             }
                         )
 
-                    elif match_nccl_AllReduce:  ## 'ncclAllReduce\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
-                        comm = match_nccl_AllReduce.group(1)
+                    elif match_nccl_AllReduce:  ## 'ncclAllReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
+                        commHash = match_nccl_AllReduce.group(1)
                         stream = match_nccl_AllReduce.group(2)
                         data_size = int(match_nccl_AllReduce.group(3))
                         type_size = int(match_nccl_AllReduce.group(4))
@@ -219,7 +219,7 @@ def get_nsys_events(dir_path):
                         ts_end = row[2] // 1000  ## ns to us
 
                         gpuId = pid_to_gpuId[pid]
-                        commId = comm_to_commId[gpuId][comm]
+                        commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                         if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
@@ -266,7 +266,7 @@ def get_nsys_events(dir_path):
                             Parse_State[gpuId] = 5
 
                         elif Parse_State[gpuId] == 1:
-                            commId = comm_to_commId[gpuId][comm]
+                            commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                             if comm_info[commId]['nranks'] > 1:
@@ -302,8 +302,8 @@ def get_nsys_events(dir_path):
 
                                 Parse_State[gpuId] = 5
 
-                    elif match_nccl_Broadcast:  ## 'ncclBroadcast\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), root (\d+)'
-                        comm = match_nccl_Broadcast.group(1)
+                    elif match_nccl_Broadcast:  ## 'ncclBroadcast\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), root (\d+)'
+                        commHash = match_nccl_Broadcast.group(1)
                         stream = match_nccl_Broadcast.group(2)
                         data_size = int(match_nccl_Broadcast.group(3))
                         type_size = int(match_nccl_Broadcast.group(4))
@@ -314,7 +314,7 @@ def get_nsys_events(dir_path):
                         ts_end = row[2] // 1000  ## ns to us
 
                         gpuId = pid_to_gpuId[pid]
-                        commId = comm_to_commId[gpuId][comm]
+                        commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                         if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
@@ -361,7 +361,7 @@ def get_nsys_events(dir_path):
                             Parse_State[gpuId] = 5
 
                         elif Parse_State[gpuId] == 1:
-                            commId = comm_to_commId[gpuId][comm]
+                            commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                             if comm_info[commId]['nranks'] > 1:
@@ -397,8 +397,8 @@ def get_nsys_events(dir_path):
 
                                 Parse_State[gpuId] = 5
 
-                    elif match_nccl_AllGather:  ## 'ncclAllGather\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), pid (\d+)'
-                        comm = match_nccl_AllGather.group(1)
+                    elif match_nccl_AllGather:  ## 'ncclAllGather\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), pid (\d+)'
+                        commHash = match_nccl_AllGather.group(1)
                         stream = match_nccl_AllGather.group(2)
                         data_size = int(match_nccl_AllGather.group(3))
                         type_size = int(match_nccl_AllGather.group(4))
@@ -408,7 +408,7 @@ def get_nsys_events(dir_path):
                         ts_end = row[2] // 1000  ## ns to us
 
                         gpuId = pid_to_gpuId[pid]
-                        commId = comm_to_commId[gpuId][comm]
+                        commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                         if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
@@ -454,7 +454,7 @@ def get_nsys_events(dir_path):
                             Parse_State[gpuId] = 5
 
                         elif Parse_State[gpuId] == 1:
-                            commId = comm_to_commId[gpuId][comm]
+                            commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                             if comm_info[commId]['nranks'] > 1:
@@ -490,8 +490,8 @@ def get_nsys_events(dir_path):
 
                                 Parse_State[gpuId] = 5
 
-                    elif match_nccl_ReduceScatter:  ## 'ncclReduceScatter\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+)'
-                        comm = match_nccl_ReduceScatter.group(1)
+                    elif match_nccl_ReduceScatter:  ## 'ncclReduceScatter\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+)'
+                        commHash = match_nccl_ReduceScatter.group(1)
                         stream = match_nccl_ReduceScatter.group(2)
                         data_size = int(match_nccl_ReduceScatter.group(3))
                         type_size = int(match_nccl_ReduceScatter.group(4))
@@ -502,7 +502,7 @@ def get_nsys_events(dir_path):
                         ts_end = row[2] // 1000  ## ns to us
 
                         gpuId = pid_to_gpuId[pid]
-                        commId = comm_to_commId[gpuId][comm]
+                        commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                         if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
@@ -549,7 +549,7 @@ def get_nsys_events(dir_path):
                             Parse_State[gpuId] = 5
 
                         elif Parse_State[gpuId] == 1:
-                            commId = comm_to_commId[gpuId][comm]
+                            commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                             if comm_info[commId]['nranks'] > 1:
@@ -586,13 +586,13 @@ def get_nsys_events(dir_path):
                                 Parse_State[gpuId] = 5
 
                     elif match_Coll_Info: 
-                        ## 'collType (\d+) root (\d+) redOp (\d+) algo (\d+) proto (\d+) comm (\S+) stream (\S+) data_size (\d+) type_size (\d+) chunkSize (\d+) chunkCount (\d+) chunkSteps (\d+) sliceSteps (\d+) stepSize (\d+) pid (\d+)'
+                        ## 'collType (\d+) root (\d+) redOp (\d+) algo (\d+) proto (\d+) commHash (\S+) stream (\S+) data_size (\d+) type_size (\d+) chunkSize (\d+) chunkCount (\d+) chunkSteps (\d+) sliceSteps (\d+) stepSize (\d+) pid (\d+)'
                         collType = int(match_Coll_Info.group(1))
                         root = int(match_Coll_Info.group(2))
                         redOp = int(match_Coll_Info.group(3))
                         algo = match_Coll_Info.group(4)
                         proto = match_Coll_Info.group(5)
-                        comm = match_Coll_Info.group(6)
+                        commHash = match_Coll_Info.group(6)
                         stream = match_Coll_Info.group(7)
                         data_size = int(match_Coll_Info.group(8))
                         type_size = int(match_Coll_Info.group(9))
@@ -603,7 +603,7 @@ def get_nsys_events(dir_path):
                         pid = match_Coll_Info.group(15)
 
                         gpuId = pid_to_gpuId[pid]
-                        commId = comm_to_commId[gpuId][comm]
+                        commId = commHash_to_commId[gpuId][commHash]
                         
                         if Parse_State[gpuId] == 0:
                             nccl_events[goal_rank][gpuId][last_Coll_streamId[gpuId]][-1]['algorithm'] = algo
@@ -621,7 +621,7 @@ def get_nsys_events(dir_path):
                             if CollType not in events_counter[goal_rank][gpuId][commId]:
                                 events_counter[goal_rank][gpuId][commId][CollType] = 0
 
-                            assert comm_to_commId[gpuId][comm] == nccl_events[goal_rank][gpuId][last_Coll_streamId[gpuId]][-1]['commId'], 'not the same comm in groupoperation'
+                            assert commHash_to_commId[gpuId][commHash] == nccl_events[goal_rank][gpuId][last_Coll_streamId[gpuId]][-1]['commId'], 'not the same comm in groupoperation'
                             assert stream_to_streamId[gpuId][stream] == nccl_events[goal_rank][gpuId][last_Coll_streamId[gpuId]][-1]['streamId'], 'not the same stream in group operation 1'
                             assert stream_to_streamId[gpuId][stream] == last_Coll_streamId[gpuId], 'not the same stream in group operation 2'
 
@@ -683,6 +683,18 @@ def get_nsys_events(dir_path):
 
                     elif match_nccl_GroupStart:
                         pid = match_nccl_GroupStart.group(1)
+
+                        if pid not in pid_to_gpuId:
+                            known_gpus += 1
+                            gpuId = known_gpus
+                            pid_to_gpuId[pid] = gpuId
+                            commHash_to_commId[gpuId] = {}
+                            stream_to_streamId[gpuId] = {}
+                            Parse_State[gpuId] = 0  ## awaiting P2P or Group operations
+                            nccl_events[goal_rank][gpuId] = {}    
+                            cupti_kernel_results[goal_rank][gpuId] = {}
+                            events_counter[goal_rank][gpuId] = {}
+
                         gpuId = pid_to_gpuId[pid]
 
                         if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
@@ -712,8 +724,11 @@ def get_nsys_events(dir_path):
                             nccl_events[goal_rank][gpuId][last_Coll_streamId[gpuId]][-1]['ts_end'] = ts_group_end[gpuId]
                             Parse_State[gpuId] = 6
 
-                    elif match_nccl_Send:  ## 'ncclSend\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), receiver_rank (\d+), pid (\d+)'
-                        comm = match_nccl_Send.group(1)
+                        elif Parse_State[gpuId] == 1:  ## in case directly call ncclGroupEnd() after ncclGroupStart() 
+                            Parse_State[gpuId] = 0
+
+                    elif match_nccl_Send:  ## 'ncclSend\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), receiver_rank (\d+), pid (\d+)'
+                        commHash = match_nccl_Send.group(1)
                         stream = match_nccl_Send.group(2)
                         data_size = int(match_nccl_Send.group(3))
                         type_size = int(match_nccl_Send.group(4))
@@ -726,7 +741,7 @@ def get_nsys_events(dir_path):
                             Parse_State[gpuId] = 0
                         
                         if Parse_State[gpuId] == 1:
-                            commId = comm_to_commId[gpuId][comm]
+                            commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                             if comm_info[commId]['nranks'] > 1:
@@ -765,7 +780,7 @@ def get_nsys_events(dir_path):
                                 last_update[gpuId] = 'P2P'
 
                         elif Parse_State[gpuId] == 2:
-                            commId = comm_to_commId[gpuId][comm]
+                            commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
                             streamId = stream_to_streamId[gpuId][stream]
 
@@ -781,7 +796,7 @@ def get_nsys_events(dir_path):
                             last_update[gpuId] = 'P2P'
 
                     elif match_nccl_Recv:
-                        comm = match_nccl_Recv.group(1)
+                        commHash = match_nccl_Recv.group(1)
                         stream = match_nccl_Recv.group(2)
                         data_size = int(match_nccl_Recv.group(3))
                         type_size = int(match_nccl_Recv.group(4))
@@ -793,8 +808,8 @@ def get_nsys_events(dir_path):
                         if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
                             Parse_State[gpuId] = 0
                         
-                        if Parse_State[gpuId] == 1:  ## 'ncclRecv\(\): comm (\S+), stream (\S+), data_size (\d+), type_size (\d+), sender_rank (\d+)'
-                            commId = comm_to_commId[gpuId][comm]
+                        if Parse_State[gpuId] == 1:  ## 'ncclRecv\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), sender_rank (\d+)'
+                            commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
                             if comm_info[commId]['nranks'] > 1:
@@ -833,7 +848,7 @@ def get_nsys_events(dir_path):
                                 last_update[gpuId] = 'P2P'
 
                         elif Parse_State[gpuId] == 2:
-                            commId = comm_to_commId[gpuId][comm]
+                            commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
                             streamId = stream_to_streamId[gpuId][stream]
 
