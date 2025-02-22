@@ -120,8 +120,8 @@ def get_nsys_events(dir_path):
                         nranks = match_Comm_Info.group(4)
                         pid = match_Comm_Info.group(5)
 
-                        ts_init_start = row[1] // 1000  ## ns to us
-                        ts_init_end = row[2] // 1000  ## ns to us
+                        ts_init_start = row[1] ## ns
+                        ts_init_end = row[2] ## ns
 
                         if commId not in comm_info:
                             comm_info[commId] = {}
@@ -215,8 +215,8 @@ def get_nsys_events(dir_path):
                         red_op = match_nccl_AllReduce.group(5)
                         pid = match_nccl_AllReduce.group(6)
 
-                        ts_start = row[1] // 1000  ## ns to us
-                        ts_end = row[2] // 1000  ## ns to us
+                        ts_start = row[1] ## ns
+                        ts_end = row[2] ## ns
 
                         gpuId = pid_to_gpuId[pid]
                         commId = commHash_to_commId[gpuId][commHash]
@@ -310,8 +310,8 @@ def get_nsys_events(dir_path):
                         root_rank = match_nccl_Broadcast.group(5)
                         pid = match_nccl_Broadcast.group(6)
 
-                        ts_start = row[1] // 1000  ## ns to us
-                        ts_end = row[2] // 1000  ## ns to us
+                        ts_start = row[1] ## ns
+                        ts_end = row[2] ## ns
 
                         gpuId = pid_to_gpuId[pid]
                         commId = commHash_to_commId[gpuId][commHash]
@@ -404,8 +404,8 @@ def get_nsys_events(dir_path):
                         type_size = int(match_nccl_AllGather.group(4))
                         pid = match_nccl_AllGather.group(5)
 
-                        ts_start = row[1] // 1000  ## ns to us
-                        ts_end = row[2] // 1000  ## ns to us
+                        ts_start = row[1] ## ns
+                        ts_end = row[2] ## ns
 
                         gpuId = pid_to_gpuId[pid]
                         commId = commHash_to_commId[gpuId][commHash]
@@ -498,8 +498,8 @@ def get_nsys_events(dir_path):
                         red_op = match_nccl_ReduceScatter.group(5)
                         pid = match_nccl_ReduceScatter.group(6)
 
-                        ts_start = row[1] // 1000  ## ns to us
-                        ts_end = row[2] // 1000  ## ns to us
+                        ts_start = row[1] ## ns
+                        ts_end = row[2] ## ns
 
                         gpuId = pid_to_gpuId[pid]
                         commId = commHash_to_commId[gpuId][commHash]
@@ -701,7 +701,7 @@ def get_nsys_events(dir_path):
                             Parse_State[gpuId] = 0
 
                         if Parse_State[gpuId] == 0:
-                            ts_group_start[gpuId] = row[1] // 1000  ## ns to us
+                            ts_group_start[gpuId] = row[1] ## ns
                             Parse_State[gpuId] = 1  ## awaiting ncclColl or ncclP2P, ignore ncclGroupStart/ncclGroupEnd in between
 
                         elif Parse_State[gpuId] == 2:
@@ -715,12 +715,12 @@ def get_nsys_events(dir_path):
                             Parse_State[gpuId] = 2
 
                         elif Parse_State[gpuId] == 2:
-                            ts_group_end[gpuId] = row[2] // 1000  ## ns to us
+                            ts_group_end[gpuId] = row[2] ## ns
                             nccl_events[goal_rank][gpuId][last_P2P_streamId[gpuId]][-1]['ts_end'] = ts_group_end[gpuId]
                             Parse_State[gpuId] = 4
 
                         elif Parse_State[gpuId] == 5:
-                            ts_group_end[gpuId] = row[2] // 1000  ## ns to us
+                            ts_group_end[gpuId] = row[2] ## ns
                             nccl_events[goal_rank][gpuId][last_Coll_streamId[gpuId]][-1]['ts_end'] = ts_group_end[gpuId]
                             Parse_State[gpuId] = 6
 
@@ -901,7 +901,7 @@ def get_nsys_events(dir_path):
 
                         gpuId = pid_to_gpuId[pid]
 
-                        ts_kernel = row[2] // 1000 ## ns to us
+                        ts_kernel = row[2] ## ns
 
                         if last_update[gpuId] == 'Coll':
                             nccl_events[goal_rank][gpuId][last_Coll_streamId[gpuId]][-1]['ts_kernel'] = ts_kernel
@@ -930,8 +930,8 @@ def get_nsys_events(dir_path):
 
                     cupti_kernel_results[goal_rank][gpuId][streamId].append({
                         'gpu_event_type': fields[1],
-                        'ts_gpu_start': start // 1000,
-                        'ts_gpu_end': end // 1000,
+                        'ts_gpu_start': start,
+                        'ts_gpu_end': end,
                     })
 
             conn.close()
@@ -1572,7 +1572,7 @@ def get_intra_node_gpu_transfer_time(data_size, transfer_type):
     """
 
     if transfer_type == 'Send':
-        return data_size * 10**6 // (20 * 10**9 * 1)  ## us
+        return data_size * 10**9 // (20 * 10**9 * 1)  ## ns
 
     elif transfer_type == 'Recv':
         return 0
