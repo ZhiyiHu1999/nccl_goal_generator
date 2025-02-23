@@ -3,13 +3,15 @@
 #SBATCH --job-name="deepspeed_example"
 #SBATCH --time=02:00:00
 #SBATCH --partition=amdrtx
-#SBATCH --nodelist=ault[43-44]
+#SBATCH --nodelist=ault[41-42]
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-task=2
 #SBATCH --mem=200G
 #SBATCH --output=deepspeed_example.%j.o
 #SBATCH --error=deepspeed_example.%j.e
 #SBATCH --account=g34
+
+# conda activate test_env
 
 module load openmpi/4.1.1
 module load cuda/11.8.0
