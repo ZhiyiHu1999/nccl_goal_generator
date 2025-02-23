@@ -406,7 +406,6 @@ def get_nsys_events(dir_path):
 
                         ts_start = row[1] ## ns
                         ts_end = row[2] ## ns
-
                         gpuId = pid_to_gpuId[pid]
                         commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
@@ -720,7 +719,7 @@ def get_nsys_events(dir_path):
                             Parse_State[gpuId] = 4
 
                         elif Parse_State[gpuId] == 5:
-                            ts_group_end[gpuId] = row[2] ## ns
+                            ts_group_end[gpuId] = row[2]  ## ns
                             nccl_events[goal_rank][gpuId][last_Coll_streamId[gpuId]][-1]['ts_end'] = ts_group_end[gpuId]
                             Parse_State[gpuId] = 6
 
@@ -930,8 +929,8 @@ def get_nsys_events(dir_path):
 
                     cupti_kernel_results[goal_rank][gpuId][streamId].append({
                         'gpu_event_type': fields[1],
-                        'ts_gpu_start': start,
-                        'ts_gpu_end': end,
+                        'ts_gpu_start': start, ## ns
+                        'ts_gpu_end': end, ## ns
                     })
 
             conn.close()
@@ -1079,6 +1078,7 @@ def get_events_parallel_group(nccl_events):
                         events_group = {}    
                         events_group['events'] = []
                         events_group['ts_group_host_start'] = event['ts_start']
+                        events_group['ts_group_gpu_start'] = event['ts_gpu_start']
                         events_group['ts_group_gpu_end'] = event['ts_gpu_end']
 
                         for coll_event in event['coll_events']:
@@ -1115,6 +1115,7 @@ def get_events_parallel_group(nccl_events):
                         events_group = {}    
                         events_group['events'] = []
                         events_group['ts_group_host_start'] = event['ts_start']
+                        events_group['ts_group_gpu_start'] = event['ts_gpu_start']
                         events_group['ts_group_gpu_end'] = event['ts_gpu_end']
 
                         for p2p_event in event['P2P_events']:
@@ -1148,6 +1149,7 @@ def get_events_parallel_group(nccl_events):
                         events_group = {}    
                         events_group['events'] = []
                         events_group['ts_group_host_start'] = event['ts_start']
+                        events_group['ts_group_gpu_start'] = event['ts_gpu_start']
                         events_group['ts_group_gpu_end'] = event['ts_gpu_end']
 
                         events_group['events'].append(event)
@@ -1534,7 +1536,7 @@ def get_reduction_time(data_size, protocol):  ## data_size: size of data, not da
     f = interpolate.interp1d(sizes, [np.mean(data['NPKIT_EVENT_GPU_RECV_REDUCE_SEND'][str(size)]) for size in sizes], kind='linear', fill_value="extrapolate")
     interpolated_value = f(data_size)
     
-    return int(random.gauss(interpolated_value, interpolated_value * 0.1))
+    return int(random.gauss(interpolated_value, interpolated_value * 0.01))
 
 # def get_copy_time(data_size):
 #     return data_size//10  ## us
@@ -1563,19 +1565,19 @@ def get_copy_time(data_size, protocol):  ## data_size: size of data, not data + 
     f = interpolate.interp1d(sizes, [np.mean(data['NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND'][str(size)]) for size in sizes], kind='linear', fill_value="extrapolate")
     interpolated_value = f(data_size)
     
-    return int(random.gauss(interpolated_value, interpolated_value * 0.1))
+    return int(random.gauss(interpolated_value, interpolated_value * 0.01))
 
 def get_intra_node_gpu_transfer_time(data_size, transfer_type):  
     """
     data_size [byte]: data + flag, not just data
-    Here we use the bandwidth of NVLink 1.0, which is 20 GT/s , each transfer is 1 byte
+    Here we use the bandwidth of NVLink 3.0, which is 50 GT/s , each transfer is 1 byte
     """
 
     if transfer_type == 'Send':
-        return data_size * 10**9 // (20 * 10**9 * 1)  ## ns
+        return data_size * 10**9 // (50 * 10**9 * 1 * 2)  ## ns
 
     elif transfer_type == 'Recv':
-        return 0
+        return data_size * 10**9 // (50 * 10**9 * 1 * 2)  ## ns
 
 def get_event_type(operation):
     if operation == 'AllReduce':
@@ -1615,14 +1617,22 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
 
             for gpuId, gpu_events in goal_events.items():
                 SendRecvEvents_To_TaskCounter[goal_rank][gpuId] = {}
+
+                gpu_all_stream_start_time = None
                 for streamId, stream_events in gpu_events.items():
-                    last_group_event_end_time =  comm_init_events[goal_rank][gpuId]['ts_init_end']
+                    if gpu_all_stream_start_time is None:
+                        gpu_all_stream_start_time = stream_events[0]['ts_group_gpu_start']
+                    else:
+                        gpu_all_stream_start_time = min(gpu_all_stream_start_time, stream_events[0]['ts_group_gpu_start'])
+
+                for streamId, stream_events in gpu_events.items():
+                    last_group_event_end_time =  gpu_all_stream_start_time
                     last_group_event_end_id = node_start_calc_id
                     for group_event_index, group_event in enumerate(stream_events): 
                         launched = 0
 
                         task_counter += 1
-                        file.write(f"l{task_counter}: calc {max(group_event['ts_group_host_start'] - last_group_event_end_time, 0)}\n")  ## Calc between first group host event start and last group gpu event end
+                        file.write(f"l{task_counter}: calc {group_event['ts_group_gpu_start'] - last_group_event_end_time}\n")  ## Former calc between first group host event start and last group gpu event end
                         file.write(f"l{task_counter} requires l{last_group_event_end_id}\n")
                         group_event_start_calc_id = task_counter
 
@@ -1645,7 +1655,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
 
                                 if launched == 0:
                                     task_counter += 1
-                                    file.write(f"l{task_counter}: calc {event['ts_kernel'] - event['ts_start']}\n")  ## Calc between nccl kernel launch end and host event start
+                                    file.write(f"l{task_counter}: calc 0\n")  ## Former calc between nccl kernel launch end and host event start
                                     file.write(f"l{task_counter} requires l{group_event_start_calc_id}\n")
                                     p2p_group_start_calc_id = task_counter
 
@@ -1716,7 +1726,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
 
                                 if launched == 0:
                                     task_counter += 1
-                                    file.write(f"l{task_counter}: calc {event['ts_kernel'] - event['ts_start']}\n")  ## Calc between nccl kernel launch end and host event start
+                                    file.write(f"l{task_counter}: calc 0\n")  ## Former calc between nccl kernel launch end and host event start
                                     file.write(f"l{task_counter} requires l{group_event_start_calc_id}\n")
                                     gpu_event_start_calc_id = task_counter
 
@@ -2783,19 +2793,26 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
             for gpuId, gpu_events in goal_events.items():
                 gpuId_commId_cpu_counter[gpuId] = {}
 
+                gpu_all_stream_start_time = None
+                for streamId, stream_events in gpu_events.items():
+                    if gpu_all_stream_start_time is None:
+                        gpu_all_stream_start_time = stream_events[0]['ts_group_gpu_start']
+                    else:
+                        gpu_all_stream_start_time = min(gpu_all_stream_start_time, stream_events[0]['ts_group_gpu_start'])
+
                 for streamId, stream_events in gpu_events.items():
                     cpu_counter_start = cpu_counter_end + 1
                     cpu_counter = cpu_counter_start
                     cpu_counter_end = cpu_counter
 
-                    last_group_event_end_time =  comm_init_events[goal_rank][gpuId]['ts_init_end']
+                    last_group_event_end_time =  gpu_all_stream_start_time
                     last_group_event_end_id = node_start_calc_id
                     for group_event_index, group_event in enumerate(stream_events): 
                         launched = 0
                         cpu_counter = cpu_counter_start
 
                         task_counter += 1
-                        file.write(f"l{task_counter}: calc {max(group_event['ts_group_host_start'] - last_group_event_end_time, 0)} cpu {cpu_counter}\n")  ## Calc between first group host event start and last group gpu event end
+                        file.write(f"l{task_counter}: calc {group_event['ts_group_gpu_start'] - last_group_event_end_time} cpu {cpu_counter}\n")  ## Former calc between first group host event start and last group gpu event end
                         file.write(f"l{task_counter} requires l{last_group_event_end_id}\n")
                         group_event_start_calc_id = task_counter
 
@@ -2826,7 +2843,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
 
                                 if launched == 0:
                                     task_counter += 1
-                                    file.write(f"l{task_counter}: calc {event['ts_kernel'] - event['ts_start']} cpu {cpu_counter}\n")  ## Calc between nccl kernel launch end and host event start
+                                    file.write(f"l{task_counter}: calc 0 cpu {cpu_counter}\n")  ## Former calc between nccl kernel launch end and host event start
                                     file.write(f"l{task_counter} requires l{group_event_start_calc_id}\n")
                                     p2p_group_start_calc_id = task_counter
 
@@ -2901,7 +2918,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                 
                                 if launched == 0:
                                     task_counter += 1
-                                    file.write(f"l{task_counter}: calc {event['ts_kernel'] - event['ts_start']} cpu {cpu_counter}\n")  ## Calc between nccl kernel launch end and host event start
+                                    file.write(f"l{task_counter}: calc 0 cpu {cpu_counter}\n")  ## Former calc between nccl kernel launch end and host event start
                                     file.write(f"l{task_counter} requires l{group_event_start_calc_id}\n")
                                     gpu_event_start_calc_id = task_counter
 
