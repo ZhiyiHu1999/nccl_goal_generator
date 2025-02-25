@@ -1437,11 +1437,13 @@ def apply_user_config(yaml_file, events_parallel_group, comm_init_events, comm_I
 
 def get_events_dependency(nccl_group_events, comm_init_events, goal_file_name):
     num_ranks = len(nccl_group_events)
-    task_counter = 0
+    # task_counter = 0
     with open(goal_file_name, 'w') as file:
         file.write(f"num_ranks {num_ranks}\n")
 
         for goal_rank in range(num_ranks):
+            task_counter = 0
+            
             file.write(f"\nrank {goal_rank}")
             file.write(" {\n")
 
@@ -1595,12 +1597,14 @@ def get_event_type(operation):
 
 def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_info, goal_file_name):
     num_ranks = len(nccl_group_events)
-    task_counter = 0
+    # task_counter = 0
     SendRecvEvents_To_TaskCounter = {}
     with open(goal_file_name, 'w') as file:
         file.write(f"num_ranks {num_ranks}\n")
 
         for goal_rank in range(num_ranks):
+            task_counter = 0
+
             file.write(f"\nrank {goal_rank}")
             file.write(" {\n")
 
@@ -2768,11 +2772,13 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
 
 def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, comm_info, SendRecvEvents_To_TaskCounter, goal_file_name):
     num_ranks = len(nccl_group_events)
-    task_counter = 0
+    # task_counter = 0
     with open(goal_file_name, 'w') as file:
         file.write(f"num_ranks {num_ranks}\n")
 
         for goal_rank in range(num_ranks):
+            task_counter = 0
+
             file.write(f"\nrank {goal_rank}")
             file.write(" {\n")
 
