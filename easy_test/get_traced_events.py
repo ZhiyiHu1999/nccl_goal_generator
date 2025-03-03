@@ -11,6 +11,7 @@ from scipy import interpolate
 
 from collections import defaultdict
 from queue import Queue
+from tqdm import tqdm
 
 #### Postprocessing nsys files
 def get_nsys_events(dir_path):
@@ -1607,8 +1608,8 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
     SendRecvEvents_To_TaskCounter = {}
     with open(goal_file_name, 'w') as file:
         file.write(f"num_ranks {num_ranks}\n")
-
         for goal_rank in range(num_ranks):
+            print(f"[DEBUG] goal_rank: {goal_rank}")
             task_counter = 0
 
             file.write(f"\nrank {goal_rank}")
@@ -1635,7 +1636,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events, comm_
                     else:
                         gpu_all_stream_start_time = min(gpu_all_stream_start_time, stream_events[0]['ts_group_gpu_start'])
 
-                for streamId, stream_events in gpu_events.items():
+                for streamId, stream_events in tqdm(gpu_events.items()):
                     last_group_event_end_time =  gpu_all_stream_start_time
                     last_group_event_end_id = node_start_calc_id
                     for group_event_index, group_event in enumerate(stream_events): 
@@ -4653,16 +4654,15 @@ def main():
     # Get nsys events
     Dir_Path = './results/nsys_reports'
     Comm_Init_Events, NCCL_Events, CUPTI_Kernel_Results, Comm_Info, HostName_To_GoalRank = get_nsys_events(Dir_Path)  ## nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank
+    intermediate_output = {
+        "hostname_to_rank": HostName_To_GoalRank,
+        "comm_info": Comm_Info,
+        "cupti_kernel_results": CUPTI_Kernel_Results,
+        "nccl_events": NCCL_Events,
+        "comm_init_events": Comm_Init
+    }
     with open('./results/nsys_events_intermediate_output.json', 'w') as json_file:
-        json.dump(HostName_To_GoalRank, json_file, indent=4)
-        json_file.write("\n\n")
-        json.dump(Comm_Info, json_file, indent=4)
-        json_file.write("\n\n")
-        json.dump(CUPTI_Kernel_Results, json_file, indent=4)
-        json_file.write("\n\n")
-        json.dump(NCCL_Events, json_file, indent=4)
-        json_file.write("\n\n")
-        json.dump(Comm_Init_Events, json_file, indent=4)
+        json.dump(intermediate_output, json_file, indent=4)
     print('Nsys_Events has been exported to nsys_events_intermediate_output.json')
 
     Merged_Events = merge_nsys_events(NCCL_Events, CUPTI_Kernel_Results, Comm_Info)
@@ -4692,10 +4692,11 @@ def main():
             json.dump(Comm_Info, json_file, indent=4)
             json_file.write("\n\n")
 
-    Goal_File_Name = './results/Events_Dependency.goal'
-    get_events_dependency(Events_Parallel_Group, Comm_Init_Events, Goal_File_Name)
-    print('Events goal file has been exported to Events_Dependency.goal')
+    # Goal_File_Name = './results/Events_Dependency.goal'
+    # get_events_dependency(Events_Parallel_Group, Comm_Init_Events, Goal_File_Name)
+    # print('Events goal file has been exported to Events_Dependency.goal')
 
+    print(f"[INFO] Start to generate goal file for In-GPU and Internode events")
     Goal_File_Name = './results/InGPU_MicroEvents_Dependency.goal'
     SendRecvEvents_To_TaskCounter = get_in_gpu_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, Goal_File_Name)
     with open('./results/SendRecvEvents_To_TaskCounter.json', 'w') as json_file:
