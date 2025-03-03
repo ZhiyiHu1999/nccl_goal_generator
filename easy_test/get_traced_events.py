@@ -4659,12 +4659,12 @@ def main():
         "comm_info": Comm_Info,
         "cupti_kernel_results": CUPTI_Kernel_Results,
         "nccl_events": NCCL_Events,
-        "comm_init_events": Comm_Init
+        "comm_init_events": Comm_Init_Events
     }
     with open('./results/nsys_events_intermediate_output.json', 'w') as json_file:
         json.dump(intermediate_output, json_file, indent=4)
     print('Nsys_Events has been exported to nsys_events_intermediate_output.json')
-
+    exit(0)
     Merged_Events = merge_nsys_events(NCCL_Events, CUPTI_Kernel_Results, Comm_Info)
     with open('./results/nsys_events_merged_output.json', 'w') as json_file:
         json.dump(Merged_Events, json_file, indent=4)
