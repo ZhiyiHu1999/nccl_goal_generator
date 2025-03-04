@@ -127,7 +127,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                                 file.write(f"l{task_counter}: send {max(1, nelem)}b to {goal_rank_peer} tag {tag} cpu {cpu_counter}\n")
                                                 p2p_index[p2p_peer_Ix] += 1
                                             else:
-                                                file.write(f"l{task_counter}: calc {get(nelem, 'Send')} cpu {cpu_counter}\n")
+                                                file.write(f"l{task_counter}: calc {get_intra_node_gpu_transfer_time(nelem, 'Send')} cpu {cpu_counter}\n")
 
                                         elif p2p_event_type == 'Recv':
                                             if goal_rank_peer != goal_rank:
