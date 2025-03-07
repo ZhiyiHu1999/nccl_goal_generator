@@ -13,6 +13,7 @@ from queue import Queue
 def get_nsys_events(dir_path):
     comm_info = {}
     nccl_events = {}
+    profile_interval = {}
     cupti_kernel_results = {}
     HostName_To_GoalRank = {}
     GoalRank_To_NumOfGPUs = {}
@@ -60,6 +61,9 @@ def get_nsys_events(dir_path):
             cursor.execute('SELECT text, start, end FROM NVTX_EVENTS')  ## row[0]: text, row[1]: ts_start, row[2]: ts_end
             nvtx_events_results = cursor.fetchall()
 
+            pattern_nsys_profile_start = r"nsys profiling start, pid: (\d+)"
+            pattern_nsys_profile_end = r"nsys profiling stopped, pid: (\d+)"
+
             pattern_Comm_Info = r'commHash (\S+) commId (\S+) rank (\d+) nranks (\d+) pid (\d+)'
             pattern_Comm_NumOfChannels = r'(\d+) coll channels, (\d+) nvls channels, (\d+) p2p channels, (\d+) p2p channels per peer, pid (\d+)'
 
@@ -86,6 +90,9 @@ def get_nsys_events(dir_path):
 
             for row in nvtx_events_results:
                 if row[0]:
+                    match_profile_start = re.search(pattern_nsys_profile_start, row[0])
+                    match_profile_end = re.search(pattern_nsys_profile_end, row[0])
+
                     match_Comm_Info = re.search(pattern_Comm_Info, row[0])
                     match_Comm_NumOfChannels = re.search(pattern_Comm_NumOfChannels, row[0])
 
@@ -910,6 +917,24 @@ def get_nsys_events(dir_path):
 
                         elif last_update[gpuId] == 'P2P':
                             nccl_events[goal_rank][gpuId][last_P2P_streamId[gpuId]][-1]['ts_kernel'] = ts_kernel
+                
+                    elif match_profile_start:
+                        pid = match_profile_start.group(1)
+                        assert pid in pid_to_gpuId, f'[ERROR] pid {pid} not in pid_to_gpuId'
+                        gpuId = pid_to_gpuId[pid]
+                        ts_start = row[1] ## ns
+                        assert gpuId not in profile_interval, f'[ERROR] gpuId {gpuId} already in profile_interval'
+                        
+                        profile_interval[gpuId] = {}
+                        profile_interval[gpuId]["start"] = ts_start
+                    
+                    elif match_profile_end:
+                        pid = match_profile_end.group(1)
+                        assert pid in pid_to_gpuId, f'[ERROR] pid {pid} not in pid_to_gpuId'
+                        gpuId = pid_to_gpuId[pid]
+                        ts_end = row[1]
+                        assert gpuId in profile_interval, f'[ERROR] gpuId {gpuId} not in profile_interval'
+                        profile_interval[gpuId]["end"] = ts_end
             
             cursor.execute('SELECT globalPid, pid FROM PROCESSES')
             globalPid_pids = cursor.fetchall()
@@ -938,4 +963,4 @@ def get_nsys_events(dir_path):
 
             conn.close()
         
-    return comm_init_events, nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank
+    return comm_init_events, nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank, profile_interval

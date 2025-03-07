@@ -2,7 +2,9 @@ from .utils import modRanks, div_up, get_event_type
 from .intra_node_gpu_transfer_time import get_intra_node_gpu_transfer_time
 from .reduction_copy_time import get_reduction_time, get_copy_time
 
-def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, comm_info, SendRecvEvents_To_TaskCounter, goal_file_name):
+def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, comm_info,
+                                          SendRecvEvents_To_TaskCounter,
+                                          goal_file_name, profile_interval={}):
     num_ranks = len(nccl_group_events)
     # task_counter = 0
     with open(goal_file_name, 'w') as file:
@@ -32,11 +34,17 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                 gpuId_commId_cpu_counter[gpuId] = {}
 
                 gpu_all_stream_start_time = None
-                for streamId, stream_events in gpu_events.items():
-                    if gpu_all_stream_start_time is None:
-                        gpu_all_stream_start_time = stream_events[0]['ts_group_gpu_start']
-                    else:
-                        gpu_all_stream_start_time = min(gpu_all_stream_start_time, stream_events[0]['ts_group_gpu_start'])
+                if gpuId in profile_interval:
+                    gpu_all_stream_start_time = profile_interval[gpuId]["start"]
+                    gpu_all_stream_end_time = profile_interval[gpuId]["end"]
+                    print(f"[DEBUG] Profiling interval for GPU {gpuId}: [{gpu_all_stream_start_time},{gpu_all_stream_end_time}] ({(gpu_all_stream_end_time - gpu_all_stream_start_time) / 1e9:.3f} s)")
+                else:
+                    for streamId, stream_events in gpu_events.items():
+                        if gpu_all_stream_start_time is None:
+                            gpu_all_stream_start_time = stream_events[0]['ts_group_gpu_start']
+                        else:
+                            gpu_all_stream_start_time = min(gpu_all_stream_start_time, stream_events[0]['ts_group_gpu_start'])
+                    gpu_all_stream_end_time = float('inf')
 
                 for streamId, stream_events in gpu_events.items():
                     cpu_counter_start = cpu_counter_end + 1
@@ -45,7 +53,9 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
 
                     last_group_event_end_time =  gpu_all_stream_start_time
                     last_group_event_end_id = node_start_calc_id
-                    for group_event_index, group_event in enumerate(stream_events): 
+                    for group_event_index, group_event in enumerate(stream_events):
+                        if group_event['ts_group_gpu_start'] < gpu_all_stream_start_time:
+                            continue
                         launched = 0
                         cpu_counter = cpu_counter_start
 
@@ -1674,12 +1684,23 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                     file.write(f"l{task_counter} requires l{gpu_event_start_calc_id}\n")
                                     file.write(f"l{gpu_event_end_calc_id} requires l{task_counter}\n")  
 
-                        if group_event_index == len(stream_events) - 1:
+                        if group_event["ts_group_gpu_start"] >= gpu_all_stream_end_time or \
+                            group_event_index == len(stream_events) - 1:
                             file.write(f"l{node_end_calc_id} requires l{last_group_event_end_id}\n")
             
             for gpuId, gpu_events in goal_events.items():
+                if gpuId in profile_interval:
+                    gpu_all_stream_start_time = profile_interval[gpuId]['start']
+                    gpu_all_stream_end_time = profile_interval[gpuId]['end']
+                else:
+                    gpu_all_stream_start_time = 0
+                    gpu_all_stream_end_time = float('inf')
                 for streamId, stream_events in gpu_events.items():
-                    for group_event_index, group_event in enumerate(stream_events): 
+                    for group_event_index, group_event in enumerate(stream_events):
+                        if group_event["ts_group_gpu_start"] <= gpu_all_stream_start_time or \
+                            group_event["ts_group_gpu_end"] >= gpu_all_stream_end_time:
+                            continue
+
                         for event in group_event['events']:
                             if event['event_type'] == 'AllReduce' or event['event_type'] == 'Broadcast' or event['event_type'] == 'AllGather' or event['event_type'] == 'ReduceScatter':
                                 algo = event['algorithm']

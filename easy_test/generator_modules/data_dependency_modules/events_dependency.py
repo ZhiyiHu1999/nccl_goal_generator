@@ -2,7 +2,8 @@ from .utils import modRanks, div_up, get_event_type
 from .intra_node_gpu_transfer_time import get_intra_node_gpu_transfer_time
 from .reduction_copy_time import get_reduction_time, get_copy_time
 
-def get_events_dependency(nccl_group_events, comm_init_events, goal_file_name):
+def get_events_dependency(nccl_group_events, comm_init_events,
+                          goal_file_name, profile_interval=None):
     num_ranks = len(nccl_group_events)
     # task_counter = 0
     with open(goal_file_name, 'w') as file:
@@ -15,6 +16,8 @@ def get_events_dependency(nccl_group_events, comm_init_events, goal_file_name):
             file.write(" {\n")
 
             goal_events = nccl_group_events[goal_rank]
+            print(f"[DEBUG] Goal Rank: {goal_rank}")
+            # print(goal_events)
             task_counter += 1
             file.write(f"l{task_counter}: calc 0\n") ## Start point of the node
             node_start_calc_id = task_counter
@@ -22,8 +25,15 @@ def get_events_dependency(nccl_group_events, comm_init_events, goal_file_name):
             task_counter += 1
             file.write(f"l{task_counter}: calc 0\n") ## End point of the node
             node_end_calc_id = task_counter
+            profile_start = 0
+            profile_end = float('inf')
 
             for gpuId, gpu_events in goal_events.items():
+                if gpuId in profile_interval:
+                    profile_start = profile_interval[gpuId]["start"]
+                    profile_end = profile_interval[gpuId]["end"]
+                    print(f"[DEBUG] Profile Interval: {profile_interval[gpuId]}")
+                
                 gpu_all_stream_start_time = None
                 for streamId, stream_events in gpu_events.items():
                     if gpu_all_stream_start_time is None:

@@ -27,13 +27,15 @@ def main():
 
     # Get nsys events
     Dir_Path = './results/nsys_reports'
-    Comm_Init_Events, NCCL_Events, CUPTI_Kernel_Results, Comm_Info, HostName_To_GoalRank = get_nsys_events(Dir_Path)  ## nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank
+    Comm_Init_Events, NCCL_Events, CUPTI_Kernel_Results, Comm_Info, \
+        HostName_To_GoalRank, profile_interval = get_nsys_events(Dir_Path)  ## nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank
     intermediate_output = {
         "hostname_to_rank": HostName_To_GoalRank,
         "comm_info": Comm_Info,
         "cupti_kernel_results": CUPTI_Kernel_Results,
         "nccl_events": NCCL_Events,
-        "comm_init_events": Comm_Init_Events
+        "comm_init_events": Comm_Init_Events,
+        "profile_interval": profile_interval
     }
     with open('./results/nsys_events_intermediate_output.json', 'w') as json_file:
         json.dump(intermediate_output, json_file, indent=4)
@@ -66,20 +68,20 @@ def main():
             json.dump(Comm_Info, json_file, indent=4)
             json_file.write("\n\n")
 
-    # Goal_File_Name = './results/Events_Dependency.goal'
-    # get_events_dependency(Events_Parallel_Group, Comm_Init_Events, Goal_File_Name)
-    # print('Events goal file has been exported to Events_Dependency.goal')
+    Goal_File_Name = './results/Events_Dependency.goal'
+    get_events_dependency(Events_Parallel_Group, Comm_Init_Events, Goal_File_Name, profile_interval)
+    print('Events goal file has been exported to Events_Dependency.goal')
 
     print(f"[INFO] Start to generate goal file for In-GPU and Internode events")
     Goal_File_Name = './results/InGPU_MicroEvents_Dependency.goal'
-    SendRecvEvents_To_TaskCounter = get_in_gpu_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, Goal_File_Name)
+    SendRecvEvents_To_TaskCounter = get_in_gpu_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, Goal_File_Name, profile_interval)
     with open('./results/SendRecvEvents_To_TaskCounter.json', 'w') as json_file:
         json.dump(SendRecvEvents_To_TaskCounter, json_file, indent=4)
         json_file.write("\n\n")
     print('In-GPU goal file has been exported to InGPU_MicroEvents_Dependency.goal')
 
     Goal_File_Name = './results/InterNode_MicroEvents_Dependency.goal'
-    get_inter_node_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, SendRecvEvents_To_TaskCounter, Goal_File_Name)
+    get_inter_node_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, SendRecvEvents_To_TaskCounter, Goal_File_Name, profile_interval)
     print('Internode goal file has been exported to InterNode_MicroEvents_Dependency.goal')
 
 if __name__ == '__main__':
