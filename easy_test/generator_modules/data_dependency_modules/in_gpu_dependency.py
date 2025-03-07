@@ -55,6 +55,10 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events,
                         if group_event["ts_group_gpu_start"] < gpu_all_stream_start_time:
                             continue
 
+                        if group_event["ts_group_gpu_start"] >= gpu_all_stream_end_time:
+                            file.write(f"l{node_end_calc_id} requires l{last_group_event_end_id}\n")
+                            break
+
                         launched = 0
 
                         task_counter += 1
@@ -1244,8 +1248,7 @@ def get_in_gpu_microevents_dependency(nccl_group_events, comm_init_events,
                                     file.write(f"l{task_counter} requires l{gpu_event_start_calc_id}\n")
                                     file.write(f"l{gpu_event_end_calc_id} requires l{task_counter}\n")  
                         
-                        if group_event["ts_group_gpu_start"] >= gpu_all_stream_end_time or \
-                            group_event_index == len(stream_events) - 1:
+                        if group_event_index == len(stream_events) - 1:
                             file.write(f"l{node_end_calc_id} requires l{last_group_event_end_id}\n")
 
             file.write("}\n")
