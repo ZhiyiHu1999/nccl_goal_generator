@@ -19,11 +19,35 @@ from generator_modules.apply_config import apply_user_config
 from generator_modules.data_dependency_modules.events_dependency import get_events_dependency
 from generator_modules.data_dependency_modules.in_gpu_dependency import get_in_gpu_microevents_dependency
 from generator_modules.data_dependency_modules.inter_node_dependency import get_inter_node_microevents_dependency
+from generator_modules.data_dependency_modules.reduction_copy_time import init_data
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config_node_gpu', type=str, required=False, help='yaml file for configuration of nodes and GPUs')
+
+    parser.add_argument(
+        '-c', '--config_node_gpu',
+        type=str, 
+        required=False, 
+        help='yaml file for configuration of nodes and GPUs'
+    )
+
+    parser.add_argument(
+        '-s', '--npkit_file_Simple',
+        type=str, 
+        required=True, 
+        help='NPKit benchmark results json file for Simple Protocol'
+    )
+
+    parser.add_argument(
+        '-l', '--npkit_file_LL',
+        type=str, 
+        required=True, 
+        help='NPKit benchmark results json file for LL Protocol'
+    )
+
     args = parser.parse_args()
+
+    init_data(args.npkit_file_Simple, args.npkit_file_LL)
 
     # Get nsys events
     Dir_Path = './results/nsys_reports'
