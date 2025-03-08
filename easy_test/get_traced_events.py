@@ -47,6 +47,7 @@ def main():
 
     parser.add_argument('--zero-red-copy', action='store_true', help='Whether to set all the reduction copy time to zero')
     parser.add_argument('--merge-non-overlap', action='store_true', help='Whether to merge non-overlapping events for all streams if possible')
+    parser.add_argument("--unique-nic", action='store_true', help="Whether to assign a separate NIC ID for each GPU in GOAL")
     args = parser.parse_args()
 
     init_data(args.npkit_file_Simple, args.npkit_file_LL)
@@ -111,7 +112,8 @@ def main():
     print('In-GPU goal file has been exported to InGPU_MicroEvents_Dependency.goal')
 
     Goal_File_Name = './results/InterNode_MicroEvents_Dependency.goal'
-    get_inter_node_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, SendRecvEvents_To_TaskCounter, Goal_File_Name, profile_interval, args.zero_red_copy)
+    get_inter_node_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, SendRecvEvents_To_TaskCounter,
+                                          Goal_File_Name, profile_interval, args.zero_red_copy, args.unique_nic)
     print('Internode goal file has been exported to InterNode_MicroEvents_Dependency.goal')
 
 if __name__ == '__main__':
