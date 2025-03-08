@@ -2,15 +2,15 @@ def events_list_equal(events_list_1, events_list_2):
     if len(events_list_1) != len(events_list_2):
         return 0
     
-    else:
-        num_events = len(events_list_1)
-        for i in range(num_events):
-            if events_list_1[i]['event_type'] != events_list_2[i]['gpu_event_type']:
-                if not (events_list_1[i]['event_type'] == 'GroupColl' and events_list_1[i]['coll_type'] == events_list_2[i]['gpu_event_type']):
-                    if not (events_list_1[i]['event_type'] == 'GroupP2P' and events_list_2[i]['gpu_event_type'] == 'SendRecv'):
-                        return 0
-                
-        return 1        
+    
+    num_events = len(events_list_1)
+    for i in range(num_events):
+        if events_list_1[i]['event_type'] != events_list_2[i]['gpu_event_type']:
+            if not (events_list_1[i]['event_type'] == 'GroupColl' and events_list_1[i]['coll_type'] == events_list_2[i]['gpu_event_type']):
+                if not (events_list_1[i]['event_type'] == 'GroupP2P' and events_list_2[i]['gpu_event_type'] == 'SendRecv'):
+                    return 0
+            
+    return 1
 
 def merge_nsys_events(nccl_events, cupti_kernel_results, comm_info):
     merged_events = {}

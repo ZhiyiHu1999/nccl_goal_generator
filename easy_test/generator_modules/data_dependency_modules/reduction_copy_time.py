@@ -23,12 +23,13 @@ def init_data(simple_file, ll_file):
         '0': data_ll       # LL protocol
     }
 
-def get_reduction_time(data_size, protocol):
+def get_reduction_time(data_size, protocol, zero_red_copy=False):
     """
     data_size: The size of data (not including the flag).
     protocol:  '2' (Simple) or '0' (LL).
     """
-
+    if zero_red_copy:
+        return 0
     data = _DATA_CACHE[protocol]
 
     if str(data_size) in data['NPKIT_EVENT_GPU_RECV_REDUCE_SEND']:
@@ -53,12 +54,13 @@ def get_reduction_time(data_size, protocol):
 
     return int(random.gauss(interpolated_value, interpolated_value * 0.01))
 
-def get_copy_time(data_size, protocol):
+def get_copy_time(data_size, protocol, zero_red_copy=False):
     """
     data_size: The size of data (not including the flag).
     protocol:  '2' (Simple) or '0' (LL).
     """
-
+    if zero_red_copy:
+        return 0
     data = _DATA_CACHE[protocol]
 
     if str(data_size) in data['NPKIT_EVENT_GPU_DIRECT_RECV_COPY_SEND']:

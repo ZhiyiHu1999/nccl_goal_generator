@@ -6,6 +6,7 @@ import math
 import sqlite3
 import re
 
+from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 from queue import Queue
 
@@ -964,3 +965,49 @@ def get_nsys_events(dir_path):
             conn.close()
         
     return comm_init_events, nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank, profile_interval
+
+
+def merge_stream_if_no_overlap(nccl_events, cupti_kernel_results):
+    """
+    Iterates through the NCCL events collected on all streams of a GPU and merges them if
+    no overlap is detected.
+    Returns the original nccl_events if no overlap is detected, otherwise returns the merged events.
+    """
+    merged_nccl_events = {}
+    merged_cupti_kernel_results = {}
+
+    for goal_rank, gpu_events in nccl_events.items():
+        merged_nccl_events[goal_rank] = {}
+        merged_cupti_kernel_results[goal_rank] = {}
+        for gpuId in gpu_events.keys():
+            merged_nccl_events[goal_rank][gpuId] = {}
+            merged_cupti_kernel_results[goal_rank][gpuId] = {}
+            tmp_nccl_events = []
+            tmp_cupti_kernel_results = []
+
+            for streamId, stream_events in nccl_events[goal_rank][gpuId].items():
+                tmp_nccl_events.extend(stream_events)
+            
+            for streamId, stream_events in cupti_kernel_results[goal_rank][gpuId].items():
+                tmp_cupti_kernel_results.extend(stream_events)
+            
+            tmp_nccl_events.sort(key=lambda x: x['ts_start'])
+            tmp_cupti_kernel_results.sort(key=lambda x: x['ts_gpu_start'])
+            assert len(tmp_nccl_events) == sum([len(v) for v in nccl_events[goal_rank][gpuId].values()]), 'Different number of events in nccl_events'
+            assert len(tmp_cupti_kernel_results) == sum([len(v) for v in cupti_kernel_results[goal_rank][gpuId].values()]), 'Different number of events in cupti_kernel_results'
+
+            # Checks if there is any overlap between the events
+            assert len(tmp_nccl_events) == len(tmp_cupti_kernel_results), 'Different number of events in nccl and cupti kernel results'
+            for i in range(len(tmp_nccl_events) - 1):
+                if tmp_nccl_events[i]['ts_end'] > tmp_nccl_events[i+1]['ts_start'] or \
+                    tmp_cupti_kernel_results[i]['ts_gpu_end'] > tmp_cupti_kernel_results[i+1]['ts_gpu_start']:
+                    print(f"[INFO] Overlap detected for GPU {gpuId} on goal rank {goal_rank}, not merging streams")
+                    return nccl_events, cupti_kernel_results
+
+            merged_nccl_events[goal_rank][gpuId][0] = tmp_nccl_events
+            kernel_stream_id = list(cupti_kernel_results[goal_rank][gpuId].keys())[0]
+            merged_cupti_kernel_results[goal_rank][gpuId][kernel_stream_id] = tmp_cupti_kernel_results
+            print(f"[INFO] No overlap detected for GPU {gpuId} on goal rank {goal_rank}")
+            print(f"[INFO] Streams from GPU {gpuId} have been merged into a single stream, number of events: {len(tmp_nccl_events)}")
+    
+    return merged_nccl_events, merged_cupti_kernel_results
