@@ -34,14 +34,14 @@ def main():
     parser.add_argument(
         '-s', '--npkit_file_Simple',
         type=str, 
-        required=True, 
+        default="npkit_benchmark_results/clariden/npkit_data_summary_Simple.json",
         help='NPKit benchmark results json file for Simple Protocol'
     )
 
     parser.add_argument(
         '-l', '--npkit_file_LL',
         type=str, 
-        required=True, 
+        default="npkit_benchmark_results/clariden/npkit_data_summary_LL.json",
         help='NPKit benchmark results json file for LL Protocol'
     )
 

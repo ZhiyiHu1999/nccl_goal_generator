@@ -1,6 +1,7 @@
 import json
 import random
 import numpy as np
+from functools import lru_cache
 from scipy import interpolate
 
 # Used for storing the loaded data. Only be initialized once.
@@ -23,6 +24,7 @@ def init_data(simple_file, ll_file):
         '0': data_ll       # LL protocol
     }
 
+@lru_cache(maxsize=2048)
 def get_reduction_time(data_size, protocol, zero_red_copy=False):
     """
     data_size: The size of data (not including the flag).
@@ -54,6 +56,7 @@ def get_reduction_time(data_size, protocol, zero_red_copy=False):
 
     return int(random.gauss(interpolated_value, interpolated_value * 0.01))
 
+@lru_cache(maxsize=2048)
 def get_copy_time(data_size, protocol, zero_red_copy=False):
     """
     data_size: The size of data (not including the flag).
