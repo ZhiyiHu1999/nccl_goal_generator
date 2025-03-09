@@ -12,7 +12,7 @@ from collections import defaultdict
 from queue import Queue
 from tqdm import tqdm
 
-from generator_modules.nsys_events import get_nsys_events
+from generator_modules.nsys_events import get_nsys_events, merge_stream_if_no_overlap
 from generator_modules.manipulate_events import merge_nsys_events, check_events_pair, get_events_parallel_group
 
 from generator_modules.apply_config import apply_user_config
@@ -34,17 +34,20 @@ def main():
     parser.add_argument(
         '-s', '--npkit_file_Simple',
         type=str, 
-        required=True, 
+        default="npkit_benchmark_results/clariden/npkit_data_summary_Simple.json",
         help='NPKit benchmark results json file for Simple Protocol'
     )
 
     parser.add_argument(
         '-l', '--npkit_file_LL',
         type=str, 
-        required=True, 
+        default="npkit_benchmark_results/clariden/npkit_data_summary_LL.json",
         help='NPKit benchmark results json file for LL Protocol'
     )
 
+    parser.add_argument('--zero-red-copy', action='store_true', help='Whether to set all the reduction copy time to zero')
+    parser.add_argument('--merge-non-overlap', action='store_true', help='Whether to merge non-overlapping events for all streams if possible')
+    parser.add_argument("--unique-nic", action='store_true', help="Whether to assign a separate NIC ID for each GPU in GOAL")
     args = parser.parse_args()
 
     init_data(args.npkit_file_Simple, args.npkit_file_LL)
@@ -53,6 +56,10 @@ def main():
     Dir_Path = './results/nsys_reports'
     Comm_Init_Events, NCCL_Events, CUPTI_Kernel_Results, Comm_Info, \
         HostName_To_GoalRank, profile_interval = get_nsys_events(Dir_Path)  ## nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank
+    
+    if args.merge_non_overlap:
+        NCCL_Events, CUPTI_Kernel_Results = merge_stream_if_no_overlap(NCCL_Events, CUPTI_Kernel_Results)
+    
     intermediate_output = {
         "hostname_to_rank": HostName_To_GoalRank,
         "comm_info": Comm_Info,
@@ -98,14 +105,15 @@ def main():
 
     print(f"[INFO] Start to generate goal file for In-GPU and Internode events")
     Goal_File_Name = './results/InGPU_MicroEvents_Dependency.goal'
-    SendRecvEvents_To_TaskCounter = get_in_gpu_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, Goal_File_Name, profile_interval)
+    SendRecvEvents_To_TaskCounter = get_in_gpu_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, Goal_File_Name, profile_interval, True)
     with open('./results/SendRecvEvents_To_TaskCounter.json', 'w') as json_file:
         json.dump(SendRecvEvents_To_TaskCounter, json_file, indent=4)
         json_file.write("\n\n")
     print('In-GPU goal file has been exported to InGPU_MicroEvents_Dependency.goal')
 
     Goal_File_Name = './results/InterNode_MicroEvents_Dependency.goal'
-    get_inter_node_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, SendRecvEvents_To_TaskCounter, Goal_File_Name, profile_interval)
+    get_inter_node_microevents_dependency(Events_Parallel_Group, Comm_Init_Events, Comm_Info, SendRecvEvents_To_TaskCounter,
+                                          Goal_File_Name, profile_interval, args.zero_red_copy, args.unique_nic)
     print('Internode goal file has been exported to InterNode_MicroEvents_Dependency.goal')
 
 if __name__ == '__main__':
