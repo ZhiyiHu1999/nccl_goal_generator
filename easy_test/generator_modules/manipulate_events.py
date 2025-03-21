@@ -20,13 +20,17 @@ def merge_nsys_events(nccl_events, cupti_kernel_results, comm_info):
             merged_events[goal_rank][gpuId] = {}
             for streamId, nccl_stream_events in nccl_gpu_events.items():
                 merged_events[goal_rank][gpuId][streamId] = nccl_stream_events
+                matched = False
                 for gpu_streamId, cupti_stream_events in cupti_kernel_results[goal_rank][gpuId].items():
                     if events_list_equal(nccl_stream_events, cupti_stream_events):
+                        matched = True
                         for i in range(len(nccl_stream_events)):
                             merged_events[goal_rank][gpuId][streamId][i]['ts_gpu_start'] = cupti_stream_events[i]['ts_gpu_start']
                             merged_events[goal_rank][gpuId][streamId][i]['ts_gpu_end'] = cupti_stream_events[i]['ts_gpu_end']
                         
                         print(f'goal_rank: {goal_rank}, gpuId: {gpuId}, streamId: {streamId}, gpu_streamId: {gpu_streamId}, num_events: {len(merged_events[goal_rank][gpuId][streamId])}')
+                if not matched:
+                    print(f"[ERROR] goal_rank: {goal_rank}, gpuId: {gpuId}, streamId: {streamId} has no matching cupti events")
 
     return merged_events
 

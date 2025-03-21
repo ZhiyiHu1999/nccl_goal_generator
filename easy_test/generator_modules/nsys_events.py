@@ -26,9 +26,10 @@ def get_nsys_events(dir_path):
     ts_group_end = {}
     gpuId = -1
     known_gpus = -1
-
+    file_count = 0
     for file_name in os.listdir(dir_path):  ## each file may represent a host(root process), containing info of all GPUs (one GPU per child process) or a process corresponding to one GPU
         if file_name.endswith('.sqlite'):
+            file_count += 1
             file_path = os.path.join(dir_path, file_name)
             
             pid_to_gpuId = {}
@@ -43,7 +44,7 @@ def get_nsys_events(dir_path):
             match = re.search(pattern_HostName, file_name)
             if match:
                 host_name = match.group(1)
-                print(f'Host Name: {host_name}')
+                print(f'Host {file_count} Name: {host_name}')
 
             if host_name in HostName_To_GoalRank:
                 goal_rank = HostName_To_GoalRank[host_name]
@@ -963,7 +964,20 @@ def get_nsys_events(dir_path):
                     })
 
             conn.close()
-        
+
+            for gpuId in nccl_events[goal_rank].keys():
+                len_nccl_events = sum([len(v) for v in nccl_events[goal_rank][gpuId].values()])
+                len_cupty_kernel_results = sum([len(v) for v in cupti_kernel_results[goal_rank][gpuId].values()])
+                if len_nccl_events != len_cupty_kernel_results:
+                    print(f'[ERROR] Host {goal_rank} gpu: {gpuId} Different number of events in nccl and cupti kernel results {len_nccl_events} != {len_cupty_kernel_results}')
+
+                    # Dumps events to a file
+                    with open(f'debug_nccl_events_{goal_rank}_{gpuId}.json', 'w') as f:
+                        json.dump(nccl_events[goal_rank][gpuId], f, indent=4)
+                    with open(f'debug_cupti_kernel_results_{goal_rank}_{gpuId}.json', 'w') as f:
+                        json.dump(cupti_kernel_results[goal_rank][gpuId], f, indent=4)
+                    exit(1)
+    
     return comm_init_events, nccl_events, cupti_kernel_results, comm_info, HostName_To_GoalRank, profile_interval
 
 
@@ -997,7 +1011,7 @@ def merge_stream_if_no_overlap(nccl_events, cupti_kernel_results):
             assert len(tmp_cupti_kernel_results) == sum([len(v) for v in cupti_kernel_results[goal_rank][gpuId].values()]), 'Different number of events in cupti_kernel_results'
 
             # Checks if there is any overlap between the events
-            assert len(tmp_nccl_events) == len(tmp_cupti_kernel_results), 'Different number of events in nccl and cupti kernel results'
+            assert len(tmp_nccl_events) == len(tmp_cupti_kernel_results), f'Different number of events in nccl and cupti kernel results {len(tmp_nccl_events)} != {len(tmp_cupti_kernel_results)}'
             for i in range(len(tmp_nccl_events) - 1):
                 if tmp_nccl_events[i]['ts_end'] > tmp_nccl_events[i+1]['ts_start'] or \
                     tmp_cupti_kernel_results[i]['ts_gpu_end'] > tmp_cupti_kernel_results[i+1]['ts_gpu_start']:
