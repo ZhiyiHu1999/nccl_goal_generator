@@ -96,7 +96,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                         last_group_event_end_id = task_counter
 
                         for event_index, event in enumerate(group_event['events']):
-                            file.write(f" START {event['event_type']}\n")
+                            # file.write(f" START {event['event_type']}\n")
                             if event['event_type'] == 'Send' or event['event_type'] == 'Recv':
                                 commId = event['commId']
                                 p2p_event_type = event['event_type']
@@ -1711,7 +1711,7 @@ def get_inter_node_microevents_dependency(nccl_group_events, comm_init_events, c
                                     file.write(f"l{gpu_event_end_calc_id} requires l{task_counter}\n")
 
                         
-                            file.write(f" END {event['event_type']}\n")
+                            # file.write(f" END {event['event_type']}\n")
                         if group_event_index == len(stream_events) - 1:
                             file.write(f"l{node_end_calc_id} requires l{last_group_event_end_id}\n")
 
