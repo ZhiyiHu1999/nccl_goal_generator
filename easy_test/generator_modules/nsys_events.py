@@ -74,6 +74,7 @@ def get_nsys_events(dir_path):
 
             pattern_nccl_AllReduce = r'ncclAllReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
             pattern_nccl_Broadcast = r'ncclBroadcast\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), root (\d+), pid (\d+)'
+            pattern_nccl_Reduce = r'ncclReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), root (\d+), pid (\d+)'
             pattern_nccl_AllGather = r'ncclAllGather\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), pid (\d+)'
             pattern_nccl_ReduceScatter = r'ncclReduceScatter\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
 
@@ -103,6 +104,7 @@ def get_nsys_events(dir_path):
 
                     match_nccl_AllReduce = re.search(pattern_nccl_AllReduce, row[0])
                     match_nccl_Broadcast = re.search(pattern_nccl_Broadcast, row[0])
+                    match_nccl_Reduce = re.search(pattern_nccl_Reduce, row[0])
                     match_nccl_AllGather = re.search(pattern_nccl_AllGather, row[0])
                     match_nccl_ReduceScatter = re.search(pattern_nccl_ReduceScatter, row[0])
 
@@ -388,6 +390,103 @@ def get_nsys_events(dir_path):
                                     {
                                         'event_type': 'GroupColl',
                                         'coll_type': 'Broadcast',
+                                        'commId': commId,
+                                        'comm_index': comm_info[commId]['comm_index'],
+                                        'streamId': streamId,
+                                        'my_rank': my_rank,
+                                        'gpuId': gpuId,
+                                        'ts_start': ts_group_start[gpuId],
+                                        'coll_events': []
+                                    }
+                                ) 
+
+                                last_Coll_streamId[gpuId] = streamId
+                                last_update[gpuId] = 'Coll'
+
+                                Parse_State[gpuId] = 5
+
+                    elif match_nccl_Reduce:  ## 'ncclReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), root (\d+), pid (\d+)'
+                        commHash = match_nccl_Reduce.group(1)
+                        stream = match_nccl_Reduce.group(2)
+                        data_size = int(match_nccl_Reduce.group(3))
+                        type_size = int(match_nccl_Reduce.group(4))
+                        red_op = match_nccl_Reduce.group(5)
+                        root_rank = match_nccl_Reduce.group(6)
+                        pid = match_nccl_Reduce.group(7)
+
+                        ts_start = row[1] ## ns
+                        ts_end = row[2] ## ns
+
+                        gpuId = pid_to_gpuId[pid]
+                        commId = commHash_to_commId[gpuId][commHash]
+                        my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
+
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
+                            Parse_State[gpuId] = 0
+
+                        if Parse_State[gpuId] == 0:
+                            if comm_info[commId]['nranks'] > 1:
+                                if commId not in events_counter[goal_rank][gpuId]:
+                                    events_counter[goal_rank][gpuId][commId] = {}
+
+                                if 'Reduce' not in events_counter[goal_rank][gpuId][commId]:
+                                    events_counter[goal_rank][gpuId][commId]['Reduce'] = 0
+
+                                if stream not in stream_to_streamId[gpuId]:
+                                    stream_to_streamId[gpuId][stream] = len(stream_to_streamId[gpuId])
+
+                                streamId = stream_to_streamId[gpuId][stream]
+                                if streamId not in nccl_events[goal_rank][gpuId]:
+                                    nccl_events[goal_rank][gpuId][streamId] = []
+
+                                nccl_events[goal_rank][gpuId][streamId].append(
+                                    {
+                                        'event_type': 'Reduce',
+                                        'commId': commId,
+                                        'comm_index': comm_info[commId]['comm_index'],
+                                        'streamId': streamId,
+                                        'my_rank': my_rank,
+                                        'gpuId': gpuId,
+                                        'data_size': data_size,
+                                        'type_size': type_size,
+                                        'red_op': red_op,
+                                        'root_rank': root_rank,
+                                        'ts_start': ts_start,
+                                        'ts_end': ts_end,
+                                        'seq': events_counter[goal_rank][gpuId][commId]['Reduce']
+                                    }
+                                )    
+                                
+                                events_counter[goal_rank][gpuId][commId]['Reduce'] += 1
+
+                                last_Coll_streamId[gpuId] = streamId
+                                last_update[gpuId] = 'Coll'
+
+                        elif Parse_State[gpuId] == 5:
+                            Parse_State[gpuId] = 5
+
+                        elif Parse_State[gpuId] == 1:
+                            commId = commHash_to_commId[gpuId][commHash]
+                            my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
+
+                            if comm_info[commId]['nranks'] > 1:
+                                if commId not in events_counter[goal_rank][gpuId]:
+                                    events_counter[goal_rank][gpuId][commId] = {}
+
+                                if 'Reduce' not in events_counter[goal_rank][gpuId][commId]:
+                                    events_counter[goal_rank][gpuId][commId]['Reduce'] = 0
+
+                                if stream not in stream_to_streamId[gpuId]:
+                                    stream_to_streamId[gpuId][stream] = len(stream_to_streamId[gpuId])
+
+                                streamId = stream_to_streamId[gpuId][stream]
+                                if streamId not in nccl_events[goal_rank][gpuId]:
+                                    nccl_events[goal_rank][gpuId][streamId] = []
+
+                                nccl_events[goal_rank][gpuId][streamId].append(
+                                    {
+                                        'event_type': 'GroupColl',
+                                        'coll_type': 'Reduce',
                                         'commId': commId,
                                         'comm_index': comm_info[commId]['comm_index'],
                                         'streamId': streamId,

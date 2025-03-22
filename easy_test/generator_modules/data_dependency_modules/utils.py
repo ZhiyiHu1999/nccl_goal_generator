@@ -13,6 +13,8 @@ def get_event_type(operation):
         return 2
     if operation == 'ReduceScatter':
         return 3
+    if operation == 'Reduce':
+        return 4
     elif operation == 'Send':
         return 5
     elif operation == 'Recv':
