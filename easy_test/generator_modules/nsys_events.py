@@ -231,11 +231,11 @@ def get_nsys_events(dir_path):
                         commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6 or Parse_State[gpuId] == 9:
                             Parse_State[gpuId] = 0
 
                         if Parse_State[gpuId] == 0:
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -278,7 +278,7 @@ def get_nsys_events(dir_path):
                             commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -326,11 +326,11 @@ def get_nsys_events(dir_path):
                         commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6 or Parse_State[gpuId] == 9:
                             Parse_State[gpuId] = 0
 
                         if Parse_State[gpuId] == 0:
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -373,7 +373,7 @@ def get_nsys_events(dir_path):
                             commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -422,11 +422,11 @@ def get_nsys_events(dir_path):
                         commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6 or Parse_State[gpuId] == 9:
                             Parse_State[gpuId] = 0
 
                         if Parse_State[gpuId] == 0:
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -470,7 +470,7 @@ def get_nsys_events(dir_path):
                             commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -516,11 +516,11 @@ def get_nsys_events(dir_path):
                         commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6 or Parse_State[gpuId] == 9:
                             Parse_State[gpuId] = 0
 
                         if Parse_State[gpuId] == 0:
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -534,22 +534,21 @@ def get_nsys_events(dir_path):
                                 if streamId not in nccl_events[goal_rank][gpuId]:
                                     nccl_events[goal_rank][gpuId][streamId] = []
 
-                                if data_size > 0:
-                                    nccl_events[goal_rank][gpuId][streamId].append(
-                                        {
-                                            'event_type': 'AllGather',
-                                            'commId': commId,
-                                            'comm_index': comm_info[commId]['comm_index'],
-                                            'streamId': streamId,
-                                            'my_rank': my_rank,
-                                            'gpuId': gpuId,
-                                            'data_size': data_size,
-                                            'type_size': type_size,
-                                            'ts_start': ts_start,
-                                            'ts_end': ts_end,
-                                            'seq': events_counter[goal_rank][gpuId][commId]['AllGather']
-                                        }
-                                    )
+                                nccl_events[goal_rank][gpuId][streamId].append(
+                                    {
+                                        'event_type': 'AllGather',
+                                        'commId': commId,
+                                        'comm_index': comm_info[commId]['comm_index'],
+                                        'streamId': streamId,
+                                        'my_rank': my_rank,
+                                        'gpuId': gpuId,
+                                        'data_size': data_size,
+                                        'type_size': type_size,
+                                        'ts_start': ts_start,
+                                        'ts_end': ts_end,
+                                        'seq': events_counter[goal_rank][gpuId][commId]['AllGather']
+                                    }
+                                )
                                 
                                 events_counter[goal_rank][gpuId][commId]['AllGather'] += 1
 
@@ -563,7 +562,7 @@ def get_nsys_events(dir_path):
                             commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -611,11 +610,11 @@ def get_nsys_events(dir_path):
                         commId = commHash_to_commId[gpuId][commHash]
                         my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6 or Parse_State[gpuId] == 9:
                             Parse_State[gpuId] = 0
 
                         if Parse_State[gpuId] == 0:
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -628,23 +627,23 @@ def get_nsys_events(dir_path):
                                 streamId = stream_to_streamId[gpuId][stream]
                                 if streamId not in nccl_events[goal_rank][gpuId]:
                                     nccl_events[goal_rank][gpuId][streamId] = []
-                                if data_size > 0:
-                                    nccl_events[goal_rank][gpuId][streamId].append(
-                                        {
-                                            'event_type': 'ReduceScatter',
-                                            'commId': commId,
-                                            'comm_index': comm_info[commId]['comm_index'],
-                                            'streamId': streamId,
-                                            'my_rank': my_rank,
-                                            'gpuId': gpuId,
-                                            'data_size': data_size,
-                                            'type_size': type_size,
-                                            'red_op': red_op,
-                                            'ts_start': ts_start,
-                                            'ts_end': ts_end,
-                                            'seq': events_counter[goal_rank][gpuId][commId]['ReduceScatter']
-                                        }
-                                    )
+
+                                nccl_events[goal_rank][gpuId][streamId].append(
+                                    {
+                                        'event_type': 'ReduceScatter',
+                                        'commId': commId,
+                                        'comm_index': comm_info[commId]['comm_index'],
+                                        'streamId': streamId,
+                                        'my_rank': my_rank,
+                                        'gpuId': gpuId,
+                                        'data_size': data_size,
+                                        'type_size': type_size,
+                                        'red_op': red_op,
+                                        'ts_start': ts_start,
+                                        'ts_end': ts_end,
+                                        'seq': events_counter[goal_rank][gpuId][commId]['ReduceScatter']
+                                    }
+                                )
                                 
                                 events_counter[goal_rank][gpuId][commId]['ReduceScatter'] += 1
 
@@ -658,7 +657,7 @@ def get_nsys_events(dir_path):
                             commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -694,7 +693,7 @@ def get_nsys_events(dir_path):
                     elif match_Coll_Info: 
                         ## 'collType (\d+) root (\d+) redOp (\d+) algo (\d+) proto (\d+) commHash (\S+) stream (\S+) data_size (\d+) type_size (\d+) chunkSize (\d+) chunkCount (\d+) chunkSteps (\d+) sliceSteps (\d+) stepSize (\d+) pid (\d+)'
                         collType = int(match_Coll_Info.group(1))
-                        root = int(match_Coll_Info.group(2))
+                        root_rank = int(match_Coll_Info.group(2))
                         redOp = int(match_Coll_Info.group(3))
                         algo = match_Coll_Info.group(4)
                         proto = match_Coll_Info.group(5)
@@ -737,7 +736,7 @@ def get_nsys_events(dir_path):
                                     'protocol': proto,
                                     'data_size': data_size,
                                     'type_size': type_size,
-                                    'root': root,
+                                    'root_rank': root_rank,
                                     'red_op': redOp,
                                     'seq': events_counter[goal_rank][gpuId][commId][CollType],
                                     'chunkSteps': chunkSteps,
@@ -809,7 +808,7 @@ def get_nsys_events(dir_path):
 
                         gpuId = pid_to_gpuId[pid]
 
-                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6 or Parse_State[gpuId] == 9:
                             Parse_State[gpuId] = 0
 
                         if Parse_State[gpuId] == 0:
@@ -818,6 +817,9 @@ def get_nsys_events(dir_path):
 
                         elif Parse_State[gpuId] == 2:
                             Parse_State[gpuId] = 3
+
+                        elif Parse_State[gpuId] == 7:
+                            Parse_State[gpuId] = 8
 
                     elif match_nccl_GroupEnd:
                         pid = match_nccl_GroupEnd.group(1)
@@ -839,6 +841,9 @@ def get_nsys_events(dir_path):
                         elif Parse_State[gpuId] == 1:  ## in case directly call ncclGroupEnd() after ncclGroupStart() 
                             Parse_State[gpuId] = 0
 
+                        elif Parse_State[gpuId] == 8:
+                            Parse_State[gpuId] = 7
+
                     elif match_nccl_Send:  ## 'ncclSend\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), receiver_rank (\d+), pid (\d+)'
                         commHash = match_nccl_Send.group(1)
                         stream = match_nccl_Send.group(2)
@@ -849,14 +854,17 @@ def get_nsys_events(dir_path):
 
                         gpuId = pid_to_gpuId[pid]
 
-                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
+                        ts_start = row[1] ## ns
+                        ts_end = row[2] ## ns
+
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6 or Parse_State[gpuId] == 9:
                             Parse_State[gpuId] = 0
                         
-                        if Parse_State[gpuId] == 1:
+                        if Parse_State[gpuId] == 1:  ## Group P2P
                             commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -891,7 +899,7 @@ def get_nsys_events(dir_path):
                                 last_P2P_streamId[gpuId] = streamId    
                                 last_update[gpuId] = 'P2P'
 
-                        elif Parse_State[gpuId] == 2:
+                        elif Parse_State[gpuId] == 2:  ## Group P2P
                             commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
                             streamId = stream_to_streamId[gpuId][stream]
@@ -907,7 +915,47 @@ def get_nsys_events(dir_path):
                             last_P2P_streamId[gpuId] = streamId    
                             last_update[gpuId] = 'P2P'
 
-                    elif match_nccl_Recv:
+                        elif Parse_State[gpuId] == 0:  ## Single P2P
+                            commId = commHash_to_commId[gpuId][commHash]
+                            my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
+
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
+                                if commId not in events_counter[goal_rank][gpuId]:
+                                    events_counter[goal_rank][gpuId][commId] = {}
+
+                                if 'Send' not in events_counter[goal_rank][gpuId][commId]:
+                                    events_counter[goal_rank][gpuId][commId]['Send'] = {}
+
+                                if peer_rank not in events_counter[goal_rank][gpuId][commId]['Send']:
+                                    events_counter[goal_rank][gpuId][commId]['Send'][peer_rank] = 0
+
+                                if stream not in stream_to_streamId[gpuId]:
+                                    stream_to_streamId[gpuId][stream] = len(stream_to_streamId[gpuId])
+
+                                streamId = stream_to_streamId[gpuId][stream]
+                                if streamId not in nccl_events[goal_rank][gpuId]:
+                                    nccl_events[goal_rank][gpuId][streamId] = []
+
+                                nccl_events[goal_rank][gpuId][streamId].append(
+                                    {
+                                        'event_type': 'GroupP2P',
+                                        'commId': commId,
+                                        'comm_index': comm_info[commId]['comm_index'],
+                                        'streamId': streamId,
+                                        'my_rank': my_rank,
+                                        'gpuId': gpuId,
+                                        'ts_start': ts_start,
+                                        'ts_end': ts_end,
+                                        'P2P_events': []
+                                    }
+                                ) 
+                                
+                                Parse_State[gpuId] = 7
+
+                                last_P2P_streamId[gpuId] = streamId    
+                                last_update[gpuId] = 'P2P'
+
+                    elif match_nccl_Recv:  ## 'ncclRecv\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), sender_rank (\d+)'
                         commHash = match_nccl_Recv.group(1)
                         stream = match_nccl_Recv.group(2)
                         data_size = int(match_nccl_Recv.group(3))
@@ -917,14 +965,17 @@ def get_nsys_events(dir_path):
 
                         gpuId = pid_to_gpuId[pid]
 
-                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6:
+                        ts_start = row[1] ## ns
+                        ts_end = row[2] ## ns
+
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 6 or Parse_State[gpuId] == 9:
                             Parse_State[gpuId] = 0
                         
-                        if Parse_State[gpuId] == 1:  ## 'ncclRecv\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), sender_rank (\d+)'
+                        if Parse_State[gpuId] == 1:  ## Group P2P
                             commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
 
-                            if comm_info[commId]['nranks'] > 1:
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
                                 if commId not in events_counter[goal_rank][gpuId]:
                                     events_counter[goal_rank][gpuId][commId] = {}
 
@@ -959,7 +1010,7 @@ def get_nsys_events(dir_path):
                                 last_P2P_streamId[gpuId] = streamId
                                 last_update[gpuId] = 'P2P'
 
-                        elif Parse_State[gpuId] == 2:
+                        elif Parse_State[gpuId] == 2:  ## Group P2P
                             commId = commHash_to_commId[gpuId][commHash]
                             my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
                             streamId = stream_to_streamId[gpuId][stream]
@@ -974,6 +1025,46 @@ def get_nsys_events(dir_path):
 
                             last_P2P_streamId[gpuId] = streamId
                             last_update[gpuId] = 'P2P'
+
+                        elif Parse_State[gpuId] == 0:  ## Single P2P
+                            commId = commHash_to_commId[gpuId][commHash]
+                            my_rank = comm_info[commId]['gpuId_To_rank'][gpuId]
+
+                            if comm_info[commId]['nranks'] > 1 and data_size > 0:
+                                if commId not in events_counter[goal_rank][gpuId]:
+                                    events_counter[goal_rank][gpuId][commId] = {}
+
+                                if 'Recv' not in events_counter[goal_rank][gpuId][commId]:
+                                    events_counter[goal_rank][gpuId][commId]['Recv'] = {}
+
+                                if peer_rank not in events_counter[goal_rank][gpuId][commId]['Recv']:
+                                    events_counter[goal_rank][gpuId][commId]['Recv'][peer_rank] = 0
+
+                                if stream not in stream_to_streamId[gpuId]:
+                                    stream_to_streamId[gpuId][stream] = len(stream_to_streamId[gpuId])
+
+                                streamId = stream_to_streamId[gpuId][stream]
+                                if streamId not in nccl_events[goal_rank][gpuId]:
+                                    nccl_events[goal_rank][gpuId][streamId] = []
+
+                                nccl_events[goal_rank][gpuId][streamId].append(
+                                    {
+                                        'event_type': 'GroupP2P',
+                                        'commId': commId,
+                                        'comm_index': comm_info[commId]['comm_index'],
+                                        'streamId': streamId,
+                                        'my_rank': my_rank,
+                                        'gpuId': gpuId,
+                                        'ts_start': ts_start,
+                                        'ts_end': ts_end,
+                                        'P2P_events': []
+                                    }
+                                ) 
+                                
+                                Parse_State[gpuId] = 7
+
+                                last_P2P_streamId[gpuId] = streamId    
+                                last_update[gpuId] = 'P2P'
 
                     elif match_P2P_Elem:  ## 'Bytes (\d+) nWarps (\d+) p2pType (\d+) peer (\d+) proto (\d+) countHi32 (\d+) countLo32 (\d+) chunkSize (\d+) pid (\d+)'
                         p2pType = match_P2P_Elem.group(3)
@@ -992,7 +1083,7 @@ def get_nsys_events(dir_path):
                         elif p2pType == '2':
                             p2p_type = 'Recv' 
 
-                        if Parse_State[gpuId] == 4:
+                        if Parse_State[gpuId] == 4 or Parse_State[gpuId] == 7 or Parse_State[gpuId] == 9:
                             nccl_events[goal_rank][gpuId][last_P2P_streamId[gpuId]][-1]['P2P_events'].append(
                                 {
                                     'p2p_type': p2p_type,
@@ -1005,6 +1096,9 @@ def get_nsys_events(dir_path):
                                     'seq': events_counter[goal_rank][gpuId][commId][p2p_type][peer_rank]
                                 }
                             )
+
+                            if Parse_State[gpuId] == 7:
+                                Parse_State[gpuId] = 9
 
                             events_counter[goal_rank][gpuId][commId][p2p_type][peer_rank] += 1
 
