@@ -58,12 +58,11 @@ def get_nsys_events(dir_path):
                 cupti_kernel_results[goal_rank] = {}
                 comm_init_events[goal_rank] = {}
                 events_counter[goal_rank] = {}
-    
+
             conn = sqlite3.connect(file_path)
             cursor = conn.cursor()
-            cursor.execute('SELECT text, start, end FROM NVTX_EVENTS')  ## row[0]: text, row[1]: ts_start, row[2]: ts_end
-            nvtx_events_results = cursor.fetchall()
 
+            
             pattern_nsys_profile_start = r"nsys profiling start, pid: (\d+)"
             pattern_nsys_profile_end = r"nsys profiling stopped, pid: (\d+)"
 
@@ -73,54 +72,17 @@ def get_nsys_events(dir_path):
             pattern_Ring = r'commHash (\S+) Rings \[(\d+)\] (\d+)->(\d+)->(\d+) pid (\d+)'
             pattern_Tree = r'commHash (\S+) Trees \[(\d+)\] (-?\d+)/(-?\d+)/(-?\d+)->(-?\d+)->(-?\d+) pid (\d+)'
 
-            pattern_nccl_AllReduce = r'ncclAllReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
-            pattern_nccl_Broadcast = r'ncclBroadcast\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), root (\d+), pid (\d+)'
-            pattern_nccl_Reduce = r'ncclReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), root (\d+), pid (\d+)'
-            pattern_nccl_AllGather = r'ncclAllGather\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), pid (\d+)'
-            pattern_nccl_ReduceScatter = r'ncclReduceScatter\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
+            # Find communicator info
+            cursor.execute("SELECT text, start, end FROM NVTX_EVENTS WHERE text LIKE 'commHash%'")
+            nvtx_events_results = cursor.fetchall()
 
-            pattern_nccl_Send = r'ncclSend\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), receiver_rank (\d+), pid (\d+)'
-            pattern_nccl_Recv = r'ncclRecv\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), sender_rank (\d+), pid (\d+)'
-
-            pattern_nccl_GroupStart = r'ncclGroupStart\(\): pid (\d+)'
-            pattern_nccl_GroupEnd = r'ncclGroupEnd\(\): pid (\d+)'
-
-            pattern_Coll_Info = r'collType (\d+) root (\d+) redOp (\d+) algo (\d+) proto (\d+) commHash (\S+) stream (\S+) data_size (\d+) type_size (\d+) chunkSize (\d+) chunkCount (\d+) chunkSteps (\d+) sliceSteps (\d+) stepSize (\d+) pid (\d+)'
-            pattern_Coll_Elem = r'nWarps (\d+) count (\d+) chunkCount (\d+) workCount (\d+) lastChunkCount (\d+) workOffset (\d+) sendbuff (\d+) recvbuff (\d+) pid (\d+)'
-
-            pattern_P2P_Elem = r'Bytes (\d+) nWarps (\d+) p2pType (\d+) peer (\d+) proto (\d+) countHi32 (\d+) countLo32 (\d+) chunkSize (\d+) pid (\d+)'
-
-            pattern_ncclKernel = r'ncclLaunchKernel\(\): pid (\d+)'
-
-            for row in tqdm(nvtx_events_results):
+            for row in nvtx_events_results:
                 if row[0]:
-                    match_profile_start = re.search(pattern_nsys_profile_start, row[0])
-                    match_profile_end = re.search(pattern_nsys_profile_end, row[0])
-
                     match_Comm_Info = re.search(pattern_Comm_Info, row[0])
                     match_Comm_NumOfChannels = re.search(pattern_Comm_NumOfChannels, row[0])
 
                     match_Ring = re.search(pattern_Ring, row[0])
                     match_Tree = re.search(pattern_Tree, row[0])
-
-                    match_nccl_AllReduce = re.search(pattern_nccl_AllReduce, row[0])
-                    match_nccl_Broadcast = re.search(pattern_nccl_Broadcast, row[0])
-                    match_nccl_Reduce = re.search(pattern_nccl_Reduce, row[0])
-                    match_nccl_AllGather = re.search(pattern_nccl_AllGather, row[0])
-                    match_nccl_ReduceScatter = re.search(pattern_nccl_ReduceScatter, row[0])
-
-                    match_nccl_Send = re.search(pattern_nccl_Send, row[0])
-                    match_nccl_Recv = re.search(pattern_nccl_Recv, row[0])
-
-                    match_nccl_GroupStart = re.search(pattern_nccl_GroupStart, row[0])
-                    match_nccl_GroupEnd = re.search(pattern_nccl_GroupEnd, row[0])
-
-                    match_Coll_Info = re.search(pattern_Coll_Info, row[0])
-                    match_Coll_Elem = re.search(pattern_Coll_Elem, row[0])    
-
-                    match_P2P_Elem = re.search(pattern_P2P_Elem, row[0])
-
-                    match_ncclLaunchKernel = re.search(pattern_ncclKernel, row[0])
 
                     if match_Comm_Info:  # 'commHash (\S+) commId (\S+) rank (\d+) nranks (\d+) pid (\d+)'
                         commHash = match_Comm_Info.group(1)
@@ -215,8 +177,102 @@ def get_nsys_events(dir_path):
                                 'channel_Id': channel_Id
                             }
                         )
+            
+            # Fetch information about profiling interval
+            cursor.execute("SELECT text, start FROM NVTX_EVENTS WHERE text LIKE 'nsys profiling%'")
+            nvtx_events_results = cursor.fetchall()
 
-                    elif match_nccl_AllReduce:  ## 'ncclAllReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
+            for row in nvtx_events_results:
+                if row[0]:
+                    match_profile_start = re.search(pattern_nsys_profile_start, row[0])
+                    match_profile_end = re.search(pattern_nsys_profile_end, row[0])
+
+                    if match_profile_start:
+                        pid = match_profile_start.group(1)
+                        assert pid in pid_to_gpuId, f'[ERROR] pid {pid} not in pid_to_gpuId'
+                        gpuId = pid_to_gpuId[pid]
+                        ts_start = row[1] ## ns
+                        assert gpuId not in profile_interval, f'[ERROR] gpuId {gpuId} already in profile_interval'
+                        
+                        profile_interval[gpuId] = {}
+                        profile_interval[gpuId]["start"] = ts_start
+                    
+                    elif match_profile_end:
+                        pid = match_profile_end.group(1)
+                        assert pid in pid_to_gpuId, f'[ERROR] pid {pid} not in pid_to_gpuId'
+                        gpuId = pid_to_gpuId[pid]
+                        ts_end = row[1]
+                        assert gpuId in profile_interval, f'[ERROR] gpuId {gpuId} not in profile_interval'
+                        profile_interval[gpuId]["end"] = ts_end
+
+            cursor.execute('SELECT text, start, end FROM NVTX_EVENTS')  ## row[0]: text, row[1]: ts_start, row[2]: ts_end
+            nvtx_events_results = cursor.fetchall()
+
+            pattern_nccl_AllReduce = r'ncclAllReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
+            pattern_nccl_Broadcast = r'ncclBroadcast\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), root (\d+), pid (\d+)'
+            pattern_nccl_Reduce = r'ncclReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), root (\d+), pid (\d+)'
+            pattern_nccl_AllGather = r'ncclAllGather\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), pid (\d+)'
+            pattern_nccl_ReduceScatter = r'ncclReduceScatter\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
+
+            pattern_nccl_Send = r'ncclSend\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), receiver_rank (\d+), pid (\d+)'
+            pattern_nccl_Recv = r'ncclRecv\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), sender_rank (\d+), pid (\d+)'
+
+            pattern_nccl_GroupStart = r'ncclGroupStart\(\): pid (\d+)'
+            pattern_nccl_GroupEnd = r'ncclGroupEnd\(\): pid (\d+)'
+
+            pattern_Coll_Info = r'collType (\d+) root (\d+) redOp (\d+) algo (\d+) proto (\d+) commHash (\S+) stream (\S+) data_size (\d+) type_size (\d+) chunkSize (\d+) chunkCount (\d+) chunkSteps (\d+) sliceSteps (\d+) stepSize (\d+) pid (\d+)'
+            pattern_Coll_Elem = r'nWarps (\d+) count (\d+) chunkCount (\d+) workCount (\d+) lastChunkCount (\d+) workOffset (\d+) sendbuff (\d+) recvbuff (\d+) pid (\d+)'
+
+            pattern_P2P_Elem = r'Bytes (\d+) nWarps (\d+) p2pType (\d+) peer (\d+) proto (\d+) countHi32 (\d+) countLo32 (\d+) chunkSize (\d+) pid (\d+)'
+
+            pattern_ncclKernel = r'ncclLaunchKernel\(\): pid (\d+)'
+
+            pid_pattern = r'pid (\d+)'
+
+            for row in tqdm(nvtx_events_results):
+                if row[0]:
+                    # If profiling interval is found, ignore all events outside of it
+                    match_pid = re.search(pid_pattern, row[0])
+                    if match_pid:
+                        pid = match_pid.group(1)
+                        assert pid in pid_to_gpuId, f'[ERROR] pid {pid} not in pid_to_gpuId'
+                        gpuId = pid_to_gpuId[pid]
+                        # if gpuId not in profile_interval:
+                        #     continue
+                        if (gpuId in profiling_interval) and \
+                            (row[1] < profile_interval[gpuId]["start"] or row[1] > profile_interval[gpuId]["end"]):
+                            continue
+
+                    match_profile_start = re.search(pattern_nsys_profile_start, row[0])
+                    match_profile_end = re.search(pattern_nsys_profile_end, row[0])
+
+                    match_Comm_Info = re.search(pattern_Comm_Info, row[0])
+                    match_Comm_NumOfChannels = re.search(pattern_Comm_NumOfChannels, row[0])
+
+                    match_Ring = re.search(pattern_Ring, row[0])
+                    match_Tree = re.search(pattern_Tree, row[0])
+
+                    match_nccl_AllReduce = re.search(pattern_nccl_AllReduce, row[0])
+                    match_nccl_Broadcast = re.search(pattern_nccl_Broadcast, row[0])
+                    match_nccl_Reduce = re.search(pattern_nccl_Reduce, row[0])
+                    match_nccl_AllGather = re.search(pattern_nccl_AllGather, row[0])
+                    match_nccl_ReduceScatter = re.search(pattern_nccl_ReduceScatter, row[0])
+
+                    match_nccl_Send = re.search(pattern_nccl_Send, row[0])
+                    match_nccl_Recv = re.search(pattern_nccl_Recv, row[0])
+
+                    match_nccl_GroupStart = re.search(pattern_nccl_GroupStart, row[0])
+                    match_nccl_GroupEnd = re.search(pattern_nccl_GroupEnd, row[0])
+
+                    match_Coll_Info = re.search(pattern_Coll_Info, row[0])
+                    match_Coll_Elem = re.search(pattern_Coll_Elem, row[0])    
+
+                    match_P2P_Elem = re.search(pattern_P2P_Elem, row[0])
+
+                    match_ncclLaunchKernel = re.search(pattern_ncclKernel, row[0])
+
+
+                    if match_nccl_AllReduce:  ## 'ncclAllReduce\(\): commHash (\S+), stream (\S+), data_size (\d+), type_size (\d+), red_op (\d+), pid (\d+)'
                         commHash = match_nccl_AllReduce.group(1)
                         stream = match_nccl_AllReduce.group(2)
                         data_size = int(match_nccl_AllReduce.group(3))
@@ -1115,23 +1171,7 @@ def get_nsys_events(dir_path):
                         elif last_update[gpuId] == 'P2P':
                             nccl_events[goal_rank][gpuId][last_P2P_streamId[gpuId]][-1]['ts_kernel'] = ts_kernel
                 
-                    elif match_profile_start:
-                        pid = match_profile_start.group(1)
-                        assert pid in pid_to_gpuId, f'[ERROR] pid {pid} not in pid_to_gpuId'
-                        gpuId = pid_to_gpuId[pid]
-                        ts_start = row[1] ## ns
-                        assert gpuId not in profile_interval, f'[ERROR] gpuId {gpuId} already in profile_interval'
-                        
-                        profile_interval[gpuId] = {}
-                        profile_interval[gpuId]["start"] = ts_start
                     
-                    elif match_profile_end:
-                        pid = match_profile_end.group(1)
-                        assert pid in pid_to_gpuId, f'[ERROR] pid {pid} not in pid_to_gpuId'
-                        gpuId = pid_to_gpuId[pid]
-                        ts_end = row[1]
-                        assert gpuId in profile_interval, f'[ERROR] gpuId {gpuId} not in profile_interval'
-                        profile_interval[gpuId]["end"] = ts_end
             
             cursor.execute('SELECT globalPid, pid FROM PROCESSES')
             globalPid_pids = cursor.fetchall()
@@ -1148,7 +1188,14 @@ def get_nsys_events(dir_path):
                 if string_dict[demangled_name].startswith('ncclKernel') or string_dict[demangled_name].startswith('ncclDevKernel'):
                     fields = string_dict[demangled_name].replace('(', '_').replace(')', '_').split('_')
                     pid = pid_dict[globalPid]
+                    assert str(pid) in pid_to_gpuId, f'pid {pid} not in pid_to_gpuId'
                     gpuId = pid_to_gpuId[str(pid)]
+
+                    # Do not include the kernel if it is not inside the profile interval
+                    if gpuId in profile_interval and \
+                        (end < profile_interval[gpuId]['start'] or start > profile_interval[gpuId]['end']):
+                        continue
+
                     if streamId not in cupti_kernel_results[goal_rank][gpuId]:
                         cupti_kernel_results[goal_rank][gpuId][streamId] = [] 
 
